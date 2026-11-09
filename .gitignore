@@ -1,0 +1,135 @@
+# =====================================================================
+# PedidoFacil — .gitignore
+# Stack: Python 3.12 · FastAPI · uv · ruff · mypy · pytest · SQLite
+#
+# SÍ se versionan (no ignorar): uv.lock, .python-version, .env.example,
+# pyproject.toml, .pre-commit-config.yaml
+# =====================================================================
+
+# ---------------------------------------------------------------------
+# Secretos y configuración local
+# ---------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+credentials*.json
+service-account*.json
+
+# ---------------------------------------------------------------------
+# Entornos virtuales
+# ---------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# ---------------------------------------------------------------------
+# Python: bytecode y empaquetado
+# ---------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+.installed.cfg
+MANIFEST
+
+# ---------------------------------------------------------------------
+# Pruebas y cobertura
+# ---------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.hypothesis/
+.tox/
+.nox/
+junit*.xml
+reports/
+
+# ---------------------------------------------------------------------
+# Linters y verificadores de tipos
+# ---------------------------------------------------------------------
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# ---------------------------------------------------------------------
+# Base de datos local (SQLite) y datos generados
+# ---------------------------------------------------------------------
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+uploads/
+media/
+
+# ---------------------------------------------------------------------
+# Logs y temporales
+# ---------------------------------------------------------------------
+*.log
+logs/
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+tmp/
+.cache/
+
+# ---------------------------------------------------------------------
+# Editores e IDEs
+# ---------------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+.fleet/
+.zed/
+
+# ---------------------------------------------------------------------
+# Herramientas de IA / asistentes locales
+# ---------------------------------------------------------------------
+.claude/settings.local.json
+.aider*
+
+# ---------------------------------------------------------------------
+# Sistema operativo
+# ---------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# OneDrive (el proyecto vive en una carpeta sincronizada)
+*.odlock
+~$*

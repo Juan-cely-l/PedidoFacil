@@ -1,0 +1,59 @@
+# Instala los hooks una vez con:  uv run pre-commit install
+# Actualiza versiones con:        uv run pre-commit autoupdate
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: no-commit-to-branch      # obliga a trabajar en ramas (main solo recibe PRs)
+        args: [--branch, main]
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks                 # bloquea API keys y contraseñas antes de que lleguen al repo
+
+  # Hooks locales: usan las mismas versiones fijadas en uv.lock que la CI.
+  - repo: local
+    hooks:
+      - id: uv-lock
+        name: uv.lock sincronizado con pyproject.toml
+        entry: uv lock --check
+        language: system
+        files: ^(pyproject\.toml|uv\.lock)$
+        pass_filenames: false
+
+      - id: ruff-check
+        name: ruff (lint)
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+
+      - id: ruff-format
+        name: ruff (formato)
+        entry: uv run ruff format
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy (tipos)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: commit-msg
+        name: formato de commit tipo(PED-123)
+        entry: uv run python scripts/check_commit_msg.py
+        language: system
+        stages: [commit-msg]

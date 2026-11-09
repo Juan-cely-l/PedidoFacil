@@ -1,0 +1,103 @@
+[project]
+name = "pedidofacil"
+version = "0.1.0"
+description = "Registro y seguimiento de pedidos para emprendimientos, con extracción de pedidos asistida por IA."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "pydantic-settings>=2.6",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+# Es una aplicación, no una librería: no se construye ni se publica como paquete.
+package = false
+
+# ---------------------------------------------------------------- Ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # orden de imports
+    "N",        # nombres PEP 8
+    "UP",       # sintaxis moderna de Python
+    "B",        # bugbear: errores probables
+    "A",        # no sombrear builtins
+    "C4",       # comprensiones
+    "SIM",      # simplificaciones
+    "S",        # bandit: seguridad
+    "T20",      # sin print() olvidados
+    "PT",       # buenas prácticas de pytest
+    "RET",      # returns consistentes
+    "ARG",      # argumentos sin usar
+    "PTH",      # pathlib en lugar de os.path
+    "ERA",      # código comentado
+    "PL",       # pylint
+    "RUF",      # reglas propias de ruff
+    "FAST",     # reglas de FastAPI
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "S101",     # assert es lo normal en pruebas
+    "PLR2004",  # números mágicos en asserts
+    "ARG001",   # fixtures usadas solo por efecto
+]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["app", "tests"]
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app",
+    "--cov-report=term-missing",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
