@@ -3,7 +3,7 @@
 La constitución (`.specify/memory/constitution.md`) prevalece sobre este archivo.
 
 ## Contexto
-- App para que emprendimientos registren pedidos (a mano o pegando el mensaje del cliente para que la IA lo estructure) y los clientes consulten su estado con un enlace.
+- App que convierte el mensaje de un cliente en una cotización con precios e inventario reales, la envía por WhatsApp o Telegram y la convierte en pedido; incluye un bot de Telegram que atiende solo y alertas de stock bajo.
 - Proyecto académico individual, gestionado en Jira (proyecto `PED`). Entrega: 29 de noviembre de 2026.
 - El autor viene de Spring Boot: al explicar código, relaciónalo con su equivalente en Spring cuando ayude (Depends ↔ inyección de dependencias, Pydantic ↔ DTO + Bean Validation, Alembic ↔ Flyway, TestClient ↔ MockMvc).
 
@@ -19,6 +19,9 @@ La constitución (`.specify/memory/constitution.md`) prevalece sobre este archiv
 - SQLModel + Alembic (nunca `create_all` fuera de las pruebas). SQLite en local y pruebas; PostgreSQL (Neon) en producción vía `DATABASE_URL`.
 - Interfaz: Jinja2 + HTMX + Pico.css. Sin frameworks de frontend.
 - IA: Pydantic AI con Gemini. En pruebas: `TestModel`/`FunctionModel` y `ALLOW_MODEL_REQUESTS=False`.
+- Telegram: Bot API con httpx y webhook en `app/routers/telegram.py`; en pruebas, `httpx.MockTransport`.
+- Envío desde la web: enlaces `wa.me` y `t.me/share`, sin API de WhatsApp.
+- Montos: enteros en pesos (nunca float); descuento de inventario dentro de una transacción.
 - Login: SessionMiddleware de Starlette + `pwdlib[argon2]`; un solo usuario (el dueño).
 - Pruebas: `tests/unit` (servicios, sin HTTP) y `tests/integration` (endpoints con `TestClient`); fechas congeladas con `time-machine`.
 
@@ -41,3 +44,4 @@ La constitución (`.specify/memory/constitution.md`) prevalece sobre este archiv
 - Agrega dependencias solo cuando la historia actual las necesite.
 - No modifiques `.github/`, `.pre-commit-config.yaml`, la configuración de herramientas en `pyproject.toml` ni la constitución sin pedírmelo.
 - Interfaz, docstrings, mensajes y nombres de pruebas en español; identificadores de código en inglés.
+- La IA nunca calcula precios ni totales; si una prueba o un plan lo propone, detente y avísame.
