@@ -25,7 +25,7 @@ Cada ambiente usa sus propias credenciales. Las de producción nunca se usan en 
 
 1. Crear el proyecto `pedidofacil` en la región **AWS US East 1 (N. Virginia)**, solo con Postgres.
 2. En **Connect**, con la rama `production` y **Connection pooling desactivado**, copiar la cadena de conexión.
-3. Cambiar el prefijo `postgresql://` por `postgresql+psycopg://` y conservar `?sslmode=require&channel_binding=require`.
+3. Conservar `?sslmode=require&channel_binding=require`. No hace falta cambiar el prefijo: la app convierte `postgresql://` (y `postgres://`) a `postgresql+psycopg://` al crear el motor.
 
 ### 2. Servicio web (Render)
 
@@ -39,7 +39,7 @@ Cada ambiente usa sus propias credenciales. Las de producción nunca se usan en 
 | Build Command | `uv sync --frozen --no-dev && uv cache prune --ci` |
 | Start Command | `uv run --no-sync fastapi run app/main.py --host 0.0.0.0 --port $PORT` |
 | Instance Type | Free |
-| Health Check Path | `/health` |
+| Health Check Path | `/health/live` (no consulta la base: así Neon puede suspenderse y una caída de la base no reinicia la app) |
 | Auto-Deploy | Off |
 
 Cuando existan migraciones (Alembic), el Start Command pasa a ser `uv run --no-sync alembic upgrade head && uv run --no-sync fastapi run app/main.py --host 0.0.0.0 --port $PORT`.
@@ -50,7 +50,7 @@ Variables de entorno:
 |---|---|
 | `ENVIRONMENT` | `production` |
 | `LOG_LEVEL` | `INFO` |
-| `DATABASE_URL` | Cadena de Neon con `postgresql+psycopg://` |
+| `DATABASE_URL` | Cadena de Neon (`postgresql://…` o `postgresql+psycopg://…`) |
 | `SECRET_KEY` | Generada con el botón **Generate** de Render |
 | `AI_PROVIDER` | `fake` hasta HU-08; luego `gemini` |
 | `GEMINI_API_KEY` | Solo cuando `AI_PROVIDER=gemini` |
