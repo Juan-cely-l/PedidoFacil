@@ -15,7 +15,6 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "PedidoFácil"
     environment: Literal["test", "local", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Render define RENDER_GIT_COMMIT en cada despliegue: permite saber qué commit está corriendo.

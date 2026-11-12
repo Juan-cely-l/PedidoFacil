@@ -4,7 +4,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app import __version__
+from app import APP_NAME, __version__
 from app.config import get_settings
 
 logger = logging.getLogger("pedidofacil")
@@ -18,7 +18,7 @@ def create_app() -> FastAPI:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
 
-    application = FastAPI(title=settings.app_name, version=__version__)
+    application = FastAPI(title=APP_NAME, version=__version__)
 
     @application.get("/health", tags=["operación"])
     def health() -> dict[str, str]:
