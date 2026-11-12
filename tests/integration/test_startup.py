@@ -26,17 +26,17 @@ def test_create_app_guarda_la_configuracion_recibida(production_settings: Settin
 
 
 def test_produccion_con_ia_simulada_avisa_al_arrancar(
-    production_settings: Settings, caplog: pytest.LogCaptureFixture
+    production_settings: Settings, app_log: pytest.LogCaptureFixture
 ) -> None:
     create_app(production_settings)
 
-    assert any(FAKE_PROVIDER_WARNING in message for message in _warnings(caplog))
+    assert any(FAKE_PROVIDER_WARNING in message for message in _warnings(app_log))
 
 
 def test_produccion_con_gemini_no_avisa_de_ia_simulada(
     monkeypatch: pytest.MonkeyPatch,
     production_settings: Settings,
-    caplog: pytest.LogCaptureFixture,
+    app_log: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setenv("AI_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_API_KEY", "clave-gemini")
@@ -44,7 +44,32 @@ def test_produccion_con_gemini_no_avisa_de_ia_simulada(
 
     create_app(gemini_settings)
 
-    assert not any(FAKE_PROVIDER_WARNING in message for message in _warnings(caplog))
+    assert not any(FAKE_PROVIDER_WARNING in message for message in _warnings(app_log))
+
+
+def _app_handlers() -> list[logging.Handler]:
+    return [
+        handler
+        for handler in logging.getLogger("pedidofacil").handlers
+        if handler.get_name() == "pedidofacil"
+    ]
+
+
+def test_el_logger_de_la_app_tiene_su_propio_handler_y_no_propaga(
+    test_settings: Settings,
+) -> None:
+    # No depende de basicConfig: uvicorn y pytest ya instalan handlers en el logger raíz.
+    create_app(test_settings)
+
+    assert len(_app_handlers()) == 1
+    assert logging.getLogger("pedidofacil").propagate is False
+
+
+def test_crear_la_app_dos_veces_no_duplica_el_handler(test_settings: Settings) -> None:
+    create_app(test_settings)
+    create_app(test_settings)
+
+    assert len(_app_handlers()) == 1
 
 
 def test_create_app_aplica_el_nivel_de_log_al_logger_de_la_app(

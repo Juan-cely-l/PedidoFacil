@@ -19,11 +19,29 @@ os.environ["ENVIRONMENT"] = "test"
 
 @pytest.fixture(autouse=True)
 def restore_app_log_level() -> Iterator[None]:
-    """Restaura el nivel del logger de la app: `create_app` lo cambia y es estado global."""
+    """Restaura el logger de la app: `create_app` cambia su nivel, handlers y propagación,
+    que son estado global del proceso."""
     app_logger = logging.getLogger("pedidofacil")
     previous_level = app_logger.level
+    previous_handlers = list(app_logger.handlers)
+    previous_propagate = app_logger.propagate
     yield
     app_logger.setLevel(previous_level)
+    app_logger.handlers = previous_handlers
+    app_logger.propagate = previous_propagate
+
+
+@pytest.fixture
+def app_log(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCaptureFixture]:
+    """`caplog` conectado al logger de la app.
+
+    El logger `pedidofacil` no propaga al raíz (tiene su propio handler), así que el handler
+    de `caplog`, que vive en el raíz, no vería sus mensajes.
+    """
+    app_logger = logging.getLogger("pedidofacil")
+    app_logger.addHandler(caplog.handler)
+    yield caplog
+    app_logger.removeHandler(caplog.handler)
 
 
 @pytest.fixture

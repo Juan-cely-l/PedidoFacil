@@ -16,16 +16,18 @@ def test_la_base_responde() -> None:
         assert check_database(session) is True
 
 
-def test_la_base_caida_devuelve_false(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger="pedidofacil"):
+def test_la_base_caida_devuelve_false(app_log: pytest.LogCaptureFixture) -> None:
+    with app_log.at_level(logging.WARNING, logger="pedidofacil"):
         assert check_database(FailingSession()) is False
 
-    assert any(record.levelno >= logging.WARNING for record in caplog.records)
+    assert any(record.levelno >= logging.WARNING for record in app_log.records)
 
 
-def test_el_log_de_la_falla_no_contiene_credenciales(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.DEBUG):
+def test_el_log_de_la_falla_no_contiene_credenciales(app_log: pytest.LogCaptureFixture) -> None:
+    with app_log.at_level(logging.DEBUG, logger="pedidofacil"):
         check_database(FailingSession())
 
-    assert "usuario:clave" not in caplog.text
-    assert "postgresql://" not in caplog.text
+    # Se registró algo (si no, la prueba no verificaría nada) y no contiene credenciales.
+    assert app_log.records
+    assert "usuario:clave" not in app_log.text
+    assert "postgresql://" not in app_log.text
