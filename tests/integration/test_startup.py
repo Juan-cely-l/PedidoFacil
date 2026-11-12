@@ -1,6 +1,7 @@
 """Pruebas del arranque de la aplicación (create_app)."""
 
 import logging
+import sys
 
 import pytest
 from pydantic import SecretStr
@@ -63,6 +64,16 @@ def test_el_logger_de_la_app_tiene_su_propio_handler_y_no_propaga(
 
     assert len(_app_handlers()) == 1
     assert logging.getLogger("pedidofacil").propagate is False
+
+
+def test_el_handler_de_la_app_escribe_en_la_salida_que_captura_render(
+    test_settings: Settings,
+) -> None:
+    create_app(test_settings)
+
+    (handler,) = _app_handlers()
+    assert isinstance(handler, logging.StreamHandler)
+    assert handler.stream in (sys.stdout, sys.stderr)
 
 
 def test_crear_la_app_dos_veces_no_duplica_el_handler(test_settings: Settings) -> None:

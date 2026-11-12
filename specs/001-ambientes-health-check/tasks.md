@@ -145,12 +145,12 @@ construir `Settings` y revisar `log_level`.
 
 ### Pruebas de la Historia 4 ⚠️
 
-- [ ] T020 [P] [US4] Prueba en `tests/integration/test_docs.py`: con `create_app(test_settings)` y con `create_app(Settings(_env_file=None, environment="local", database_url="sqlite://"))`, `/docs`, `/redoc` y `/openapi.json` → 200; con `create_app(production_settings)` → 404 en las tres
-- [ ] T021 [P] [US4] Prueba en `tests/unit/test_config.py`: `log_level` por defecto es `"DEBUG"` en `local`, `"INFO"` en `production` y `"INFO"` en `test`; `LOG_LEVEL=WARNING` se respeta en los tres; y en `tests/integration/test_startup.py`, `create_app` aplica el nivel al logger `pedidofacil` (`logging.getLogger("pedidofacil").getEffectiveLevel()`)
+- [X] T020 [P] [US4] Prueba en `tests/integration/test_docs.py`: con `create_app(test_settings)` y con `create_app(Settings(_env_file=None, environment="local", database_url="sqlite://"))`, `/docs`, `/redoc` y `/openapi.json` → 200; con `create_app(production_settings)` → 404 en las tres
+- [X] T021 [P] [US4] Prueba en `tests/unit/test_config.py`: `log_level` por defecto es `"DEBUG"` en `local`, `"INFO"` en `production` y `"INFO"` en `test`; `LOG_LEVEL=WARNING` se respeta en los tres; y en `tests/integration/test_startup.py`, `create_app` aplica el nivel al logger `pedidofacil` (`logging.getLogger("pedidofacil").getEffectiveLevel()`)
 
 ### Implementación de la Historia 4
 
-- [ ] T022 [US4] Implementar en `app/config.py` el default de `log_level` en el validador y la propiedad `docs_enabled`; en `app/main.py`, pasar `docs_url`, `redoc_url` y `openapi_url` como `None` en producción y fijar el nivel con `logging.getLogger("pedidofacil").setLevel(...)` además de `basicConfig` (que no hace nada si el logger raíz ya tiene handlers, como ocurre con pytest)
+- [X] T022 [US4] Implementar en `app/config.py` el default de `log_level` en el validador y la propiedad `docs_enabled`; en `app/main.py`, pasar `docs_url`, `redoc_url` y `openapi_url` como `None` en producción y fijar el nivel con `logging.getLogger("pedidofacil").setLevel(...)` además de `basicConfig` (que no hace nada si el logger raíz ya tiene handlers, como ocurre con pytest)
 
 **Punto de control**: las cuatro historias funcionan por separado.
 

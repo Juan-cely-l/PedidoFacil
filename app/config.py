@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # Por defecto, el ambiente más estricto: local y test se declaran explícitamente.
     environment: Literal["test", "local", "production"] = "production"
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] | None = None
     # Render define RENDER_GIT_COMMIT en cada despliegue: permite saber qué commit está corriendo.
     git_commit: str = Field(default="local", validation_alias="RENDER_GIT_COMMIT")
     database_url: SecretStr | None = None
@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _apply_environment_rules(self) -> Self:
         """Completa los valores por ambiente y, en producción, exige las variables obligatorias."""
+        if self.log_level is None:
+            self.log_level = "DEBUG" if self.environment == "local" else "INFO"
         if self.environment == "production":
             if self.ai_provider is None:
                 self.ai_provider = "gemini"
@@ -61,6 +63,11 @@ class Settings(BaseSettings):
             # Clave aleatoria por proceso: nunca un valor fijo escrito en el código.
             self.secret_key = SecretStr(secrets.token_urlsafe(48))
         return self
+
+    @property
+    def docs_enabled(self) -> bool:
+        """La documentación interactiva de la API solo se publica fuera de producción."""
+        return self.environment != "production"
 
     @property
     def short_commit(self) -> str:
