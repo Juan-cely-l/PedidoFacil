@@ -31,6 +31,7 @@ La constitución (`.specify/memory/constitution.md`) prevalece sobre este archiv
   1. Rojo: después de que yo apruebe la prueba que falla → `test(PED-XX): ...`
   2. Verde: cuando `uv run pytest` pase completo → `feat(PED-XX): ...` o `fix(PED-XX): ...`
   3. Refactor (si hubo): con todo en verde → `refactor(PED-XX): ...`
+- En la fase roja, las líneas de prueba que referencian código aún inexistente llevan # type: ignore[<código>]; el commit verde los retira.
 - Antes de los commits verde y refactor, ejecuta `uv run pytest`, `uv run ruff check .` y `uv run mypy`; si algo falla, corrige primero.
 - Si un hook de pre-commit modifica archivos o falla, corrige, vuelve a hacer `git add` y repite el commit. Nunca uses `--no-verify`.
 - Mantén la línea `Co-Authored-By` que agregas por defecto (declara el uso de IA).

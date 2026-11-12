@@ -30,4 +30,16 @@ if re.search(r"\brm\s+-[a-zA-Z]*r", command):
     decide("ask", "Borrado recursivo. ¿Lo apruebas?")
 if re.search(r"alembic\s+downgrade", command):
     decide("ask", "Revertir una migración puede borrar datos. ¿Lo apruebas?")
+
+# Las pruebas existentes se editan solo con Edit (que pide confirmación): TDD no ajusta la
+# prueba para que pase. Cada patrón se limita a un mismo comando (sin cruzar |, ; ni &).
+TESTS_PATH = r"""['"]?(?:\./)?tests/"""
+WRITES_TO_TESTS = (
+    rf"\bsed\b[^|;&]*\s-i[^|;&]*{TESTS_PATH}",  # sed -i sobre un archivo de tests/
+    rf">>?\s*{TESTS_PATH}",  # redirección > o >> hacia tests/
+    rf"\btee\b[^|;&]*{TESTS_PATH}",  # tee hacia tests/
+    rf"\b(?:cp|mv)\b[^|;&]*{TESTS_PATH}",  # cp o mv (también git mv) con tests/
+)
+if any(re.search(pattern, command) for pattern in WRITES_TO_TESTS):
+    decide("ask", "El comando escribe en tests/: las pruebas se editan con Edit. ¿Lo apruebas?")
 sys.exit(0)
