@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   checks:
@@ -50,3 +50,32 @@ jobs:
           name: reportes-${{ github.run_number }}
           path: reports/
           retention-days: 30
+
+  deploy:
+    name: Desplegar a producción
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - name: Disparar el despliegue en Render
+        env:
+          DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl -fsS -X POST "$DEPLOY_HOOK" > /dev/null
+
+      - name: Verificar que producción corre este commit
+        env:
+          URL: ${{ vars.PRODUCTION_URL }}
+          SHA: ${{ github.sha }}
+        run: |
+          expected="${SHA:0:7}"
+          for i in $(seq 1 40); do
+            commit=$(curl -fsS "$URL/health" | python3 -c "import sys, json; print(json.load(sys.stdin).get('commit', ''))" || true)
+            if [ "$commit" = "$expected" ]; then echo "Producción corre $expected"; exit 0; fi
+            echo "Intento $i: producción en '${commit:-sin respuesta}', se espera $expected"
+            sleep 15
+          done
+          echo "El despliegue no terminó en 10 minutos"; exit 1
