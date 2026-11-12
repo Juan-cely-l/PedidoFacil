@@ -3,6 +3,7 @@
 import logging
 
 import pytest
+from pydantic import SecretStr
 
 from app.config import Settings
 from app.main import create_app
@@ -44,3 +45,22 @@ def test_produccion_con_gemini_no_avisa_de_ia_simulada(
     create_app(gemini_settings)
 
     assert not any(FAKE_PROVIDER_WARNING in message for message in _warnings(caplog))
+
+
+def test_create_app_aplica_el_nivel_de_log_al_logger_de_la_app(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    local_settings = Settings(
+        _env_file=None, environment="local", database_url=SecretStr("sqlite://")
+    )
+
+    create_app(local_settings)
+
+    assert logging.getLogger("pedidofacil").getEffectiveLevel() == logging.DEBUG
+
+
+def test_create_app_en_produccion_registra_desde_info(production_settings: Settings) -> None:
+    create_app(production_settings)
+
+    assert logging.getLogger("pedidofacil").getEffectiveLevel() == logging.INFO

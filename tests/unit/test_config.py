@@ -303,3 +303,29 @@ def test_en_local_una_variable_del_proceso_gana_al_archivo_env(
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
 
     assert get_settings().log_level == "WARNING"
+
+
+# Historia 4: nivel de log por defecto según el ambiente
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [("local", "DEBUG"), ("test", "INFO"), ("production", "INFO")],
+)
+def test_nivel_de_log_por_defecto_segun_el_ambiente(
+    monkeypatch: pytest.MonkeyPatch,
+    environment: Literal["local", "test", "production"],
+    expected: str,
+) -> None:
+    _set_production_env(monkeypatch, ENVIRONMENT=environment, LOG_LEVEL=None)
+
+    assert Settings(_env_file=None).log_level == expected
+
+
+@pytest.mark.parametrize("environment", ["local", "test", "production"])
+def test_un_log_level_explicito_se_respeta_en_todo_ambiente(
+    monkeypatch: pytest.MonkeyPatch, environment: Literal["local", "test", "production"]
+) -> None:
+    _set_production_env(monkeypatch, ENVIRONMENT=environment, LOG_LEVEL="WARNING")
+
+    assert Settings(_env_file=None).log_level == "WARNING"
