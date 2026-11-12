@@ -7,8 +7,8 @@ from app.config import Settings
 
 
 def _database_url(settings: Settings) -> str:
-    assert settings.database_url is not None  # type: ignore[attr-defined]
-    return settings.database_url.get_secret_value()  # type: ignore[attr-defined,no-any-return]
+    assert settings.database_url is not None
+    return settings.database_url.get_secret_value()
 
 
 def test_en_test_la_base_por_defecto_es_sqlite_en_memoria() -> None:
