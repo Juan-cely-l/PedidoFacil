@@ -125,11 +125,11 @@ comprobar el error; con una válida, crear la app.
 
 ### Pruebas de la Historia 3 ⚠️
 
-- [ ] T018 [US3] Prueba en `tests/unit/test_config.py`: en `tmp_path`, escribir `.env` con `LOG_LEVEL=ERROR` y `AI_PROVIDER=gemini`; con `ENVIRONMENT=test` en el proceso, `get_settings()` (tras `cache_clear()`) no toma esos valores; con `ENVIRONMENT=local`, sí; una variable del proceso gana sobre el `.env` en `local`
+- [X] T018 [US3] Prueba en `tests/unit/test_config.py`: en `tmp_path`, escribir `.env` con `LOG_LEVEL=ERROR` y `AI_PROVIDER=gemini`; con `ENVIRONMENT=test` en el proceso, `get_settings()` (tras `cache_clear()`) no toma esos valores; con `ENVIRONMENT=local`, sí; una variable del proceso gana sobre el `.env` en `local`
 
 ### Implementación de la Historia 3
 
-- [ ] T019 [US3] Implementar en `app/config.py` que `get_settings()` lea `ENVIRONMENT` de `os.environ` y construya `Settings(_env_file=None)` si vale `test`, o `Settings()` (con `env_file=".env"`) en otro caso (research.md R1)
+- [X] T019 [US3] Implementar en `app/config.py` que `get_settings()` lea `ENVIRONMENT` de `os.environ` y construya `Settings(_env_file=None)` si vale `test`, o `Settings()` (con `env_file=".env"`) en otro caso (research.md R1)
 
 **Punto de control**: la suite da el mismo resultado con o sin `.env` local (SC-005).
 

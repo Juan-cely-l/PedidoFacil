@@ -1,5 +1,6 @@
 """Configuración de la aplicación leída desde variables de entorno (o un archivo .env local)."""
 
+import os
 import secrets
 from functools import lru_cache
 from typing import Literal, Self
@@ -90,7 +91,13 @@ def _is_postgres_url(url: str) -> bool:
 
 @lru_cache
 def get_settings() -> Settings:
-    """Devuelve la configuración, leída una sola vez por proceso."""
+    """Devuelve la configuración, leída una sola vez por proceso.
+
+    El ambiente se toma del proceso (no del .env), porque decide si el .env se lee: en test
+    nunca, para que los valores locales del desarrollador no alteren las pruebas.
+    """
+    if os.environ.get("ENVIRONMENT") == "test":
+        return Settings(_env_file=None)
     return Settings()
 
 
