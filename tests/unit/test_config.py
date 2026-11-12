@@ -129,14 +129,14 @@ def test_produccion_acepta_secret_key_de_32_caracteres(monkeypatch: pytest.Monke
 
     settings = Settings(_env_file=None)
 
-    assert settings.secret_key is not None  # type: ignore[attr-defined]
-    assert settings.secret_key.get_secret_value() == "k" * 32  # type: ignore[attr-defined]
+    assert settings.secret_key is not None
+    assert settings.secret_key.get_secret_value() == "k" * 32
 
 
 def test_produccion_usa_gemini_por_defecto(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_production_env(monkeypatch, AI_PROVIDER=None, GEMINI_API_KEY="clave-gemini")
 
-    assert Settings(_env_file=None).ai_provider == "gemini"  # type: ignore[attr-defined]
+    assert Settings(_env_file=None).ai_provider == "gemini"
 
 
 def test_produccion_con_gemini_sin_clave_no_arranca(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -148,7 +148,7 @@ def test_produccion_con_gemini_sin_clave_no_arranca(monkeypatch: pytest.MonkeyPa
 def test_produccion_con_fake_no_exige_clave_de_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_production_env(monkeypatch, AI_PROVIDER="fake", GEMINI_API_KEY=None)
 
-    assert Settings(_env_file=None).ai_provider == "fake"  # type: ignore[attr-defined]
+    assert Settings(_env_file=None).ai_provider == "fake"
 
 
 def test_un_proveedor_de_ia_no_admitido_lista_los_valores_validos(
@@ -172,7 +172,7 @@ def test_fuera_de_produccion_el_proveedor_de_ia_es_fake(
 
     settings = Settings(_env_file=None, environment=environment)
 
-    assert settings.ai_provider == "fake"  # type: ignore[attr-defined]
+    assert settings.ai_provider == "fake"
 
 
 @pytest.mark.parametrize("environment", ["local", "test"])
@@ -184,10 +184,10 @@ def test_fuera_de_produccion_la_secret_key_se_genera(
     first = Settings(_env_file=None, environment=environment)
     second = Settings(_env_file=None, environment=environment)
 
-    assert first.secret_key is not None  # type: ignore[attr-defined]
-    assert second.secret_key is not None  # type: ignore[attr-defined]
-    assert len(first.secret_key.get_secret_value()) >= 32  # type: ignore[attr-defined]
-    assert first.secret_key != second.secret_key  # type: ignore[attr-defined]
+    assert first.secret_key is not None
+    assert second.secret_key is not None
+    assert len(first.secret_key.get_secret_value()) >= 32
+    assert first.secret_key != second.secret_key
 
 
 def test_una_database_url_vacia_cuenta_como_ausente(monkeypatch: pytest.MonkeyPatch) -> None:
