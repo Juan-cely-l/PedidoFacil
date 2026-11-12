@@ -1,11 +1,13 @@
 """Pruebas de la configuración por ambiente (app/config.py)."""
 
+from collections.abc import Iterator
+from pathlib import Path
 from typing import Literal
 
 import pytest
 from pydantic import ValidationError
 
-from app.config import Settings
+from app.config import Settings, get_settings
 
 
 def _database_url(settings: Settings) -> str:
@@ -255,3 +257,49 @@ def test_la_representacion_de_settings_oculta_los_secretos(
     assert "clave-de-produccion" not in text
     assert "usuario:clave" not in text
     assert "secret_key=SecretStr('**********')" in text
+
+
+# Historia 3: en test la configuración no lee el archivo .env
+
+
+@pytest.fixture
+def project_with_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Directorio de trabajo con un .env propio y la caché de get_settings() limpia."""
+    (tmp_path / ".env").write_text("LOG_LEVEL=ERROR\nAI_PROVIDER=gemini\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("LOG_LEVEL", raising=False)
+    monkeypatch.delenv("AI_PROVIDER", raising=False)
+    get_settings.cache_clear()
+    yield tmp_path
+    get_settings.cache_clear()
+
+
+def test_en_test_get_settings_ignora_el_archivo_env(
+    project_with_env_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "test")
+
+    settings = get_settings()
+
+    assert settings.log_level != "ERROR"
+    assert settings.ai_provider == "fake"
+
+
+def test_en_local_get_settings_lee_el_archivo_env(
+    project_with_env_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
+
+    settings = get_settings()
+
+    assert settings.log_level == "ERROR"
+    assert settings.ai_provider == "gemini"
+
+
+def test_en_local_una_variable_del_proceso_gana_al_archivo_env(
+    project_with_env_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "local")
+    monkeypatch.setenv("LOG_LEVEL", "WARNING")
+
+    assert get_settings().log_level == "WARNING"
