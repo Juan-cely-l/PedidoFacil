@@ -54,6 +54,7 @@ select = [
 known-first-party = ["app"]
 
 [tool.ruff.lint.per-file-ignores]
+".claude/hooks/**" = ["S603", "S607"]
 "tests/**" = [
     "S101",     # assert es lo normal en pruebas
     "PLR2004",  # números mágicos en asserts
