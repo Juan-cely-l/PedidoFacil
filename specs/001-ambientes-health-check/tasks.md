@@ -161,8 +161,8 @@ construir `Settings` y revisar `log_level`.
 - [X] T023 Prueba en `tests/unit/test_env_example.py` (FR-016, SC-007): toda variable que lee `Settings` (alias o nombre en mayúsculas de cada campo, excepto `RENDER_GIT_COMMIT`, que define Render) aparece en `.env.example`; `.env.example` contiene `ENVIRONMENT=local`; ninguna línea sin comentar asigna valor a `SECRET_KEY`, `GEMINI_API_KEY` ni `DATABASE_URL` con credenciales; `LOG_LEVEL` está comentado
 - [X] T024 Actualizar `.env.example`: `ENVIRONMENT=local` sin comentar; `LOG_LEVEL` comentado (por defecto según ambiente); `DATABASE_URL`, `SECRET_KEY` (con el comando de generación de contracts/configuration.md), `AI_PROVIDER` (`fake`|`gemini`) y `GEMINI_API_KEY` comentadas con una línea que explique cada una y sus valores admitidos; conservar `ADMIN_PASSWORD_HASH` y el bloque de Telegram (HU-19/HU-20)
 - [X] T025 [P] Actualizar `README.md`: tres ambientes, que `ENVIRONMENT` por defecto es `production`, el paso `cp .env.example .env` antes de `uv run fastapi dev app/main.py`, y los endpoints `/health/live` y `/health`
-- [ ] T026 Ejecutar `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` y `uv run mypy`; confirmar cobertura ≥ 80 % con ramas y revisar que ningún log ni respuesta contenga secretos (si `mypy` rechaza `_env_file`, ajustar el tipado según el plugin de Pydantic)
-- [ ] T027 Validar manualmente las secciones 2 y 3 de [quickstart.md](quickstart.md) (local y producción mal configurada)
+- [X] T026 Ejecutar `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` y `uv run mypy`; confirmar cobertura ≥ 80 % con ramas y revisar que ningún log ni respuesta contenga secretos (si `mypy` rechaza `_env_file`, ajustar el tipado según el plugin de Pydantic)
+- [X] T027 Validar manualmente las secciones 2 y 3 de [quickstart.md](quickstart.md) (local y producción mal configurada)
 - [ ] T028 Paso manual del autor antes de integrar en `main`: en Render, Health Check Path = `/health/live` y variables de producción definidas (quickstart.md, sección 4)
 
 ---
