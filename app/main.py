@@ -1,11 +1,15 @@
 """Punto de entrada de la aplicación FastAPI."""
 
 import logging
+from typing import cast
 
 from fastapi import FastAPI
+from pydantic import SecretStr
 
 from app import APP_NAME, __version__
 from app.config import Settings, get_settings
+from app.db import build_engine
+from app.routers import health
 
 logger = logging.getLogger("pedidofacil")
 
@@ -23,13 +27,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     application = FastAPI(title=APP_NAME, version=__version__)
-    # Fuente única de configuración para dependencias y routers.
+    # Fuente única de configuración y motor para dependencias y routers.
     application.state.settings = settings
-
-    @application.get("/health", tags=["operación"])
-    def health() -> dict[str, str]:
-        """Health check: lo usa Render y muestra qué versión y commit están desplegados."""
-        return {"status": "ok", "version": __version__, "commit": settings.git_commit[:7]}
+    # Único punto donde se lee la URL: Settings garantiza que existe tras validarse.
+    database_url = cast(SecretStr, settings.database_url).get_secret_value()
+    application.state.engine = build_engine(database_url)
+    application.include_router(health.router)
 
     if settings.environment == "production" and settings.ai_provider == "fake":
         logger.warning(

@@ -4,6 +4,7 @@ import secrets
 from functools import lru_cache
 from typing import Literal, Self
 
+from fastapi import Request
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -60,6 +61,11 @@ class Settings(BaseSettings):
             self.secret_key = SecretStr(secrets.token_urlsafe(48))
         return self
 
+    @property
+    def short_commit(self) -> str:
+        """Commit desplegado en 7 caracteres (o "local" si la plataforma no lo informa)."""
+        return self.git_commit[:7]
+
     def _production_problems(self) -> list[str]:
         """Lista cada variable de producción ausente o inválida, sin incluir su valor."""
         problems: list[str] = []
@@ -86,3 +92,9 @@ def _is_postgres_url(url: str) -> bool:
 def get_settings() -> Settings:
     """Devuelve la configuración, leída una sola vez por proceso."""
     return Settings()
+
+
+def get_app_settings(request: Request) -> Settings:
+    """Dependencia de FastAPI: la configuración con la que se creó la app (app.state)."""
+    settings: Settings = request.app.state.settings
+    return settings

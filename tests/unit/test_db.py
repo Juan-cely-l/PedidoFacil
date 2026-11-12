@@ -1,10 +1,12 @@
 """Pruebas del motor de base de datos (app/db.py), sin red."""
 
 import threading
+from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlalchemy import Engine, text
+from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 from sqlmodel import create_engine as real_create_engine
 
@@ -79,3 +81,11 @@ def test_sqlite_no_usa_tiempo_limite_de_conexion(monkeypatch: pytest.MonkeyPatch
 
     assert len(calls) == 1
     assert "connect_timeout" not in calls[0].get("connect_args", {})
+
+
+def test_sqlite_en_archivo_no_usa_una_unica_conexion_compartida(tmp_path: Path) -> None:
+    engine = build_engine(f"sqlite:///{tmp_path / 'pedidofacil.db'}")
+
+    assert not isinstance(engine.pool, StaticPool)
+    with Session(engine) as session:
+        assert session.execute(text("SELECT 1")).scalar_one() == 1
