@@ -10,6 +10,10 @@ from collections.abc import Iterator
 
 import pytest
 
+# app.config no tiene efectos al importarse; app.main sí (crea la app), por eso ninguna prueba
+# lo importa a nivel de módulo antes de que se fije ENVIRONMENT aquí.
+from app.config import Settings
+
 os.environ["ENVIRONMENT"] = "test"
 
 
@@ -20,3 +24,9 @@ def restore_app_log_level() -> Iterator[None]:
     previous_level = app_logger.level
     yield
     app_logger.setLevel(previous_level)
+
+
+@pytest.fixture
+def test_settings() -> Settings:
+    """Configuración del ambiente de pruebas, sin leer ningún archivo .env."""
+    return Settings(_env_file=None, environment="test")

@@ -60,9 +60,9 @@ sintaxis). **Detenerse tras cada fase roja** para que el autor revise la prueba;
 
 **Propósito**: `Settings` con `database_url` por ambiente, que usan US1–US4.
 
-- [ ] T004 Prueba en `tests/unit/test_config.py`: con `environment="test"`, `database_url` por defecto es `sqlite://`; con `environment="local"`, es `sqlite:///./pedidofacil.db`; un valor explícito se respeta; `ENVIRONMENT=staging` lanza `ValidationError` cuyo mensaje lista `test`, `local` y `production`
-- [ ] T005 Implementar en `app/config.py`: `environment: Literal["test", "local", "production"]` (mantener por ahora el default `"local"`; cambia en T010), `database_url: SecretStr | None = None` y un `@model_validator(mode="after")` que la complete según el ambiente (data-model.md). Refactor sin cambio de comportamiento (la prueba de humo sigue en verde): quitar el campo `app_name` de `Settings` y crear la constante `APP_NAME = "PedidoFácil"` en `app/__init__.py`, usada como `title` en `app/main.py`
-- [ ] T006 Agregar a `tests/conftest.py` la fixture `test_settings` (`Settings(_env_file=None, environment="test")`)
+- [X] T004 Prueba en `tests/unit/test_config.py`: con `environment="test"`, `database_url` por defecto es `sqlite://`; con `environment="local"`, es `sqlite:///./pedidofacil.db`; un valor explícito se respeta; `ENVIRONMENT=staging` lanza `ValidationError` cuyo mensaje lista `test`, `local` y `production`
+- [X] T005 Implementar en `app/config.py`: `environment: Literal["test", "local", "production"]` (mantener por ahora el default `"local"`; cambia en T010), `database_url: SecretStr | None = None` y un `@model_validator(mode="after")` que la complete según el ambiente (data-model.md). Refactor sin cambio de comportamiento (la prueba de humo sigue en verde): quitar el campo `app_name` de `Settings` y crear la constante `APP_NAME = "PedidoFácil"` en `app/__init__.py`, usada como `title` en `app/main.py`
+- [X] T006 Agregar a `tests/conftest.py` la fixture `test_settings` (`Settings(_env_file=None, environment="test")`)
 
 **Punto de control**: fundamentos listos; las historias pueden empezar.
 
