@@ -48,9 +48,9 @@ sintaxis). **Detenerse tras cada fase roja** para que el autor revise la prueba;
 
 **Propósito**: dependencias y estructura de carpetas; sin cambio de comportamiento.
 
-- [ ] T001 Agregar dependencias con `uv add sqlmodel "psycopg[binary]"` (actualiza `pyproject.toml` y `uv.lock`; justificación en research.md R11)
-- [ ] T002 [P] Crear paquetes vacíos con docstring en español: `app/routers/__init__.py`, `app/services/__init__.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py`
-- [ ] T003 Crear `tests/conftest.py` cuya primera instrucción sea `os.environ["ENVIRONMENT"] = "test"` (antes de cualquier `import app…`) y mover `tests/test_health.py` a `tests/integration/test_health.py` con `git mv`; verificar `uv run pytest` en verde (commit `chore(PED-11): …`)
+- [X] T001 Agregar dependencias con `uv add sqlmodel "psycopg[binary]"` (actualiza `pyproject.toml` y `uv.lock`; justificación en research.md R11)
+- [X] T002 [P] Crear paquetes vacíos con docstring en español: `app/routers/__init__.py`, `app/services/__init__.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py`
+- [X] T003 Crear `tests/conftest.py` cuya primera instrucción sea `os.environ["ENVIRONMENT"] = "test"` (antes de cualquier `import app…`) y mover `tests/test_health.py` a `tests/integration/test_health.py` con `git mv`; verificar `uv run pytest` en verde (commit `chore(PED-11): …`)
 
 **Punto de control**: suite en verde con la nueva estructura.
 
