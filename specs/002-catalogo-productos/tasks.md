@@ -255,10 +255,10 @@ figura en el listado ni en `list_quotable_items`.
 ## Fase 6: Pulido y temas transversales
 
 - [ ] T031 [P] Prueba en `tests/integration/test_catalog_pages.py` (SC-006): con 500 productos insertados en la sesión de la app, `GET /productos` responde 200 en menos de 2 s (`time.perf_counter`)
-- [ ] T032 [P] Actualizar `docs/despliegue.md`: el Start Command pasa a `uv run --no-sync alembic upgrade head && uv run --no-sync fastapi run app/main.py --host 0.0.0.0 --port $PORT`, y agregar una nota de que el catálogo no tiene login hasta HU-07 (PED-15). Actualizar `README.md` con `uv run alembic upgrade head` antes de `uv run fastapi dev app/main.py` y con la ruta `/productos`
+- [ ] T032 [P] Revisar que `docs/despliegue.md` y `README.md` sigan al día (el Start Command con Alembic, el orden del primer despliegue y el riesgo aceptado ya se documentaron al desplegar la Historia 1)
 - [ ] T033 Ejecutar `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy` y `uv run alembic check` (con la base local migrada); confirmar cobertura ≥ 80 % con ramas
 - [ ] T034 Validar a mano [quickstart.md](quickstart.md): recorrido 1–9, incluidas las pantallas a 360 px (SC-005)
-- [ ] T035 Paso manual del autor antes de integrar en `main`: cambiar el Start Command en Render (T032) y decidir si se publica el enlace del catálogo antes de HU-07 (riesgo en plan.md)
+- [ ] T035 Paso manual del autor **después** de integrar el PR en `main` (antes fallaría, porque `main` aún no tiene Alembic): cambiar el Start Command en Render a `uv run --no-sync alembic upgrade head && uv run --no-sync fastapi run app/main.py --host 0.0.0.0 --port $PORT`, lanzar *Manual Deploy* y verificar `/health` y `/productos` (orden en `docs/despliegue.md`). Riesgo de `/productos` sin login aceptado el 2026-11-16, con el límite de no desplegar HU-04 sin login
 
 ---
 

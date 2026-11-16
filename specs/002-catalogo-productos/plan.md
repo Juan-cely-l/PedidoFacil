@@ -160,12 +160,14 @@ docs/despliegue.md             # MODIFICAR: Start Command con alembic upgrade he
 ## Riesgos y pasos manuales
 
 - **Catálogo sin login en producción**: hasta HU-07 (PED-15, Sprint 3), cualquiera que conozca la
-  URL podría modificar el catálogo. Opciones: no publicar el enlace o no desplegar a producción
-  las páginas del catálogo hasta entonces. Decisión del dueño del producto; no bloquea esta
-  historia.
-- **Render**: antes de integrar en `main`, cambiar el Start Command a `uv run --no-sync alembic
-  upgrade head && uv run --no-sync fastapi run app/main.py --host 0.0.0.0 --port $PORT` (ya
-  previsto en `docs/despliegue.md`). Si no, la app arranca sin tablas.
+  URL podría modificar el catálogo. **Aceptado el 2026-11-16** por el dueño del producto: los
+  precios no son datos sensibles. Límite explícito: HU-04 no se despliega a producción sin login,
+  porque guarda nombre, teléfono y dirección de clientes. Registrado en `docs/despliegue.md`
+  (Riesgos aceptados).
+- **Render**: **después** de integrar en `main` (antes fallaría: `main` aún no tiene Alembic),
+  cambiar el Start Command a `uv run --no-sync alembic upgrade head && uv run --no-sync fastapi
+  run app/main.py --host 0.0.0.0 --port $PORT` y volver a desplegar. Entre el merge y ese cambio,
+  `/productos` responde 500 porque falta la tabla (orden en `docs/despliegue.md`).
 - **Pico.css por CDN**: si el CDN no responde, la página funciona pero sin estilos; aceptable
   para el alcance.
 
