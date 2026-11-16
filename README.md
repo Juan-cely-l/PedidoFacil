@@ -16,6 +16,7 @@ git clone <url-del-repo> && cd pedidofacil
 uv sync                      # crea .venv con las versiones exactas de uv.lock
 cp .env.example .env         # obligatorio: trae ENVIRONMENT=local
 uv run pre-commit install    # instala los hooks de calidad y de mensaje de commit
+uv run alembic upgrade head  # crea o actualiza las tablas de la base local
 uv run fastapi dev app/main.py
 ```
 

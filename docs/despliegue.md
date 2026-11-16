@@ -42,7 +42,19 @@ Cada ambiente usa sus propias credenciales. Las de producción nunca se usan en 
 | Health Check Path | `/health/live` (no consulta la base: así Neon puede suspenderse y una caída de la base no reinicia la app) |
 | Auto-Deploy | Off |
 
-Cuando existan migraciones (Alembic), el Start Command pasa a ser `uv run --no-sync alembic upgrade head && uv run --no-sync fastapi run app/main.py --host 0.0.0.0 --port $PORT`.
+Desde PED-88 hay migraciones (Alembic, en `migrations/`) y el Start Command pasa a ser
+`uv run --no-sync alembic upgrade head && uv run --no-sync fastapi run app/main.py --host 0.0.0.0 --port $PORT`. El cambio se hace **después** de integrar el PR que trae las migraciones, nunca antes:
+mientras `main` no tenga `alembic` ni `migrations/`, ese comando falla y la app no arranca.
+
+Orden del primer despliegue con migraciones:
+
+1. Integrar el PR en `main`. La CI despliega con el Start Command anterior: la app arranca y
+   `/health` responde, pero `/productos` da error 500 porque la tabla `product` aún no existe.
+2. En Render → Settings, cambiar el Start Command al de arriba y lanzar **Manual Deploy →
+   Deploy latest commit**. Al arrancar, `alembic upgrade head` crea las tablas en Neon.
+3. Verificar `/health` (commit esperado) y que `/productos` responda 200.
+
+A partir de ahí, cada despliegue aplica las migraciones pendientes antes de arrancar la app.
 
 Variables de entorno:
 
@@ -84,6 +96,12 @@ El rollback de Render es temporal: el siguiente merge a `main` vuelve a desplega
 
 Tras cualquiera de los dos, se verifica con `/health` que el commit reportado es el esperado, y se registra en el issue de Jira correspondiente.
 
+## Riesgos aceptados
+
+| Fecha | Riesgo | Decisión |
+|---|---|---|
+| 2026-11-16 | `/productos` (PED-88, HU-15) queda público y sin login en producción hasta HU-07 (PED-15, Sprint 3): cualquiera con la URL podría crear productos. | Aceptado por el dueño del producto: los precios no son datos sensibles. **Límite explícito**: HU-04 no se despliega a producción sin login (HU-07), porque guarda nombre, teléfono y dirección de clientes. |
+
 ## Problemas conocidos
 
 | Síntoma | Causa probable | Solución |
@@ -92,3 +110,4 @@ Tras cualquiera de los dos, se verifica con `/health` que el commit reportado es
 | La primera petición tarda unos 50 s | El plan Free de Render se suspende tras unos 15 minutos sin uso | Abrir la URL unos minutos antes de una demostración |
 | El job de despliegue falla esperando `/health` | La app no arrancó o el despliegue tardó más de 10 minutos | Revisar los logs del despliegue en Render |
 | `/health` responde 503 | No hay conexión con Neon | Revisar `DATABASE_URL` y el estado del proyecto en Neon |
+| `/productos` responde 500 y `/health` 200 | Las migraciones no se aplicaron (Start Command sin `alembic upgrade head`) | Corregir el Start Command y volver a desplegar |

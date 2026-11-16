@@ -10,7 +10,7 @@ from pydantic import SecretStr
 from app import APP_NAME, __version__
 from app.config import Settings, get_settings
 from app.db import build_engine
-from app.routers import health
+from app.routers import catalog, health
 
 LOGGER_NAME = "pedidofacil"
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -60,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     database_url = cast(SecretStr, settings.database_url).get_secret_value()
     application.state.engine = build_engine(database_url)
     application.include_router(health.router)
+    application.include_router(catalog.router)
 
     if settings.environment == "production" and settings.ai_provider == "fake":
         logger.warning(

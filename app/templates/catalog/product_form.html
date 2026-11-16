@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Nuevo producto · PedidoFácil{% endblock %}
+{% macro invalid(field) %}{% if errors.get(field) %} aria-invalid="true" aria-describedby="{{ field }}-error"{% endif %}{% endmacro %}
+{% macro error(field) %}{% if errors.get(field) %}<small id="{{ field }}-error">{{ errors[field] }}</small>{% endif %}{% endmacro %}
+{% block content %}
+<h1>Nuevo producto</h1>
+<form method="post" action="/productos" novalidate>
+  <label>
+    Nombre
+    <input name="name" value="{{ form.name }}" maxlength="100" required{{ invalid("name") }}>
+    {{ error("name") }}
+  </label>
+  <label>
+    Descripción corta (opcional)
+    <input name="description" value="{{ form.description }}" maxlength="200"{{ invalid("description") }}>
+    {{ error("description") }}
+  </label>
+  <label>
+    Precio en pesos
+    <input name="price" value="{{ form.price }}" inputmode="numeric" placeholder="45.000" required{{ invalid("price") }}>
+    {{ error("price") }}
+  </label>
+  <label>
+    <input type="checkbox" name="tracks_inventory" role="switch"{% if form.tracks_inventory %} checked{% endif %}>
+    Controla inventario
+  </label>
+  <button type="submit">Guardar</button>
+  <a href="/productos">Cancelar</a>
+</form>
+{% endblock %}

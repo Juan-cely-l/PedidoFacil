@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Productos · PedidoFácil{% endblock %}
+{% block content %}
+<hgroup>
+  <h1>Productos</h1>
+  <p><a href="/productos/nuevo" role="button">Nuevo producto</a></p>
+</hgroup>
+{% if products %}
+<ul>
+  {% for product in products %}
+  <li>
+    <a href="/productos/{{ product.id }}">{{ product.name }}</a>
+    · {{ product.price | cop }}
+    {% if product.tracks_inventory %}<small>· controla inventario</small>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>Aún no hay productos. Registra el primero para empezar a cotizar con tus precios reales.</p>
+{% endif %}
+{% endblock %}
