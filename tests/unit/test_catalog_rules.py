@@ -1,12 +1,14 @@
 """Reglas puras del catálogo: precio en pesos y normalización de nombres."""
 
 import pytest
+from pydantic import ValidationError
 from pydantic_core import PydanticCustomError
 
 from app.models.catalog import (
     PRICE_GROUPING_MESSAGE,
     PRICE_INVALID_MESSAGE,
     PRICE_TOO_HIGH_MESSAGE,
+    ProductInput,
     clean_text,
     normalize_key,
     parse_price,
@@ -102,3 +104,68 @@ def test_normalize_key_conserva_la_enie_escrita_descompuesta() -> None:
 def test_clean_text_recorta_y_colapsa_espacios_sin_cambiar_mayusculas_ni_tildes() -> None:
     assert clean_text("  Torta   Negra ") == "Torta Negra"
     assert clean_text(" Café\u00a0 Molido ") == "Café Molido"
+
+
+# Datos del formulario de producto (T009)
+
+
+def _errors_by_field(error: ValidationError) -> dict[str, str]:
+    return {str(item["loc"][0]): item["msg"] for item in error.errors()}
+
+
+def test_product_input_limpia_el_texto_y_convierte_el_precio() -> None:
+    data = ProductInput.model_validate(
+        {"name": "  Torta   Negra ", "description": "  Húmeda  ", "price": "45.000"}
+    )
+
+    assert data.name == "Torta Negra"
+    assert data.description == "Húmeda"
+    assert data.price == 45000
+    assert data.tracks_inventory is False
+
+
+def test_product_input_descripcion_es_opcional() -> None:
+    data = ProductInput.model_validate({"name": "Brownie", "price": "5000"})
+
+    assert data.description == ""
+
+
+def test_product_input_casilla_marcada_controla_inventario() -> None:
+    data = ProductInput.model_validate(
+        {"name": "Brownie", "price": "5000", "tracks_inventory": "on"}
+    )
+
+    assert data.tracks_inventory is True
+
+
+def test_product_input_acepta_nombre_de_100_y_descripcion_de_200_caracteres() -> None:
+    data = ProductInput.model_validate({"name": "n" * 100, "description": "d" * 200, "price": "1"})
+
+    assert len(data.name) == 100
+    assert len(data.description) == 200
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_product_input_nombre_vacio_es_obligatorio(name: str) -> None:
+    with pytest.raises(ValidationError) as error:
+        ProductInput.model_validate({"name": name, "price": "5000"})
+
+    assert _errors_by_field(error.value) == {"name": "El nombre es obligatorio"}
+
+
+def test_product_input_reporta_un_error_por_campo() -> None:
+    with pytest.raises(ValidationError) as error:
+        ProductInput.model_validate({"name": "n" * 101, "description": "d" * 201, "price": "45,5"})
+
+    assert _errors_by_field(error.value) == {
+        "name": "El nombre admite máximo 100 caracteres",
+        "description": "La descripción admite máximo 200 caracteres",
+        "price": PRICE_INVALID_MESSAGE,
+    }
+
+
+def test_product_input_precio_mal_agrupado_usa_el_mensaje_de_miles() -> None:
+    with pytest.raises(ValidationError) as error:
+        ProductInput.model_validate({"name": "Brownie", "price": "45.00"})
+
+    assert _errors_by_field(error.value) == {"price": PRICE_GROUPING_MESSAGE}

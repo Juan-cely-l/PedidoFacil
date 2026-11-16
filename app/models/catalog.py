@@ -3,7 +3,9 @@
 import re
 import unicodedata
 
+from pydantic import BaseModel
 from pydantic_core import PydanticCustomError
+from sqlmodel import Field, SQLModel
 
 MAX_PRICE = 100_000_000
 
@@ -61,3 +63,24 @@ def normalize_key(text: str) -> str:
             continue
         kept.append(char)
     return unicodedata.normalize("NFC", "".join(kept))
+
+
+class Product(SQLModel, table=True):
+    """Algo que vende el negocio, con su precio en pesos enteros."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=100)
+    name_key: str = Field(max_length=100)
+    description: str = Field(default="", max_length=200)
+    price: int
+    tracks_inventory: bool = False
+    is_active: bool = True
+
+
+class ProductInput(BaseModel):
+    """Datos del formulario de producto, ya validados (equivale a un DTO con Bean Validation)."""
+
+    name: str
+    description: str = ""
+    price: int
+    tracks_inventory: bool = False
