@@ -88,7 +88,7 @@ specs/002-catalogo-productos/
 
 ```text
 alembic.ini                    # NUEVO
-alembic/
+migrations/                    # protegida por .claude/hooks/guard_files.py
 ├── env.py                     # NUEVO: URL desde Settings, build_engine, SQLModel.metadata, batch en SQLite
 ├── script.py.mako             # NUEVO (plantilla de Alembic)
 └── versions/
@@ -99,7 +99,7 @@ app/
 ├── main.py                    # MODIFICAR: incluir el router del catálogo
 ├── templating.py              # NUEVO: Jinja2Templates + filtro cop (5000 → "$ 5.000")
 ├── models/
-│   ├── __init__.py            # NUEVO: exporta los modelos (lo importa alembic/env.py)
+│   ├── __init__.py            # NUEVO: exporta los modelos (lo importa migrations/env.py)
 │   └── catalog.py             # NUEVO: parse_price, normalize_key, clean_text, VariantKind, Product, ProductVariant, ProductInput, VariantInput, QuotableItem
 ├── repositories/
 │   ├── __init__.py            # NUEVO

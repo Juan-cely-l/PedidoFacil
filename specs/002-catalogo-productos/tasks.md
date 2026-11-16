@@ -57,9 +57,9 @@ separado.
 
 **Propósito**: dependencia, paquetes y esqueleto de Alembic; no cambia el comportamiento.
 
-- [ ] T001 Agregar `alembic` con `uv add alembic` (actualiza `pyproject.toml` y `uv.lock`; justificación en research.md R1)
-- [ ] T002 [P] Crear los paquetes vacíos con docstring en español `app/models/__init__.py` y `app/repositories/__init__.py`, y la carpeta `app/templates/catalog/`
-- [ ] T003 Configurar Alembic: `alembic.ini` en la raíz (`script_location = alembic`, sin URL fija), `alembic/script.py.mako` y `alembic/env.py`. Si `config.attributes.get("connection")` trae una conexión (la prueba de migraciones pasa una sobre SQLite en memoria, R2), `env.py` la usa directamente en `context.configure(connection=...)`. Si no, toma la URL de `get_settings().database_url` y crea el motor con `build_engine` de `app/db.py`. En ambos casos usa `target_metadata = SQLModel.metadata` tras `import app.models` y activa `render_as_batch=True` cuando el dialecto es SQLite (R1). Verificar `uv run pytest` en verde y hacer commit `chore(PED-88): configurar Alembic`
+- [X] T001 Agregar `alembic` con `uv add alembic` (actualiza `pyproject.toml` y `uv.lock`; justificación en research.md R1)
+- [X] T002 [P] Crear los paquetes vacíos con docstring en español `app/models/__init__.py` y `app/repositories/__init__.py`, y la carpeta `app/templates/catalog/`
+- [X] T003 Configurar Alembic: `alembic.ini` en la raíz (`script_location = migrations`, sin URL fija), `migrations/script.py.mako` y `migrations/env.py`. Si `config.attributes.get("connection")` trae una conexión (la prueba de migraciones pasa una sobre SQLite en memoria, R2), `env.py` la usa directamente en `context.configure(connection=...)`. Si no, toma la URL de `get_settings().database_url` y crea el motor con `build_engine` de `app/db.py`. En ambos casos usa `target_metadata = SQLModel.metadata` tras `import app.models` y activa `render_as_batch=True` cuando el dialecto es SQLite (R1). Verificar `uv run pytest` en verde y hacer commit `chore(PED-88): configurar Alembic`
 
 **Punto de control**: `uv run alembic current` funciona contra la base local sin migraciones.
 
@@ -137,7 +137,7 @@ listado con su precio formateado.
     - `__table_args__`: `CheckConstraint("price > 0 AND price <= 100000000", name="ck_product_price_range")` y `Index("ux_product_active_name", "name_key", unique=True, sqlite_where=text("is_active"), postgresql_where=text("is_active"))`.
   - `ProductInput(BaseModel)` con los validadores de T009.
   - Exportar ambos en `app/models/__init__.py`.
-- [ ] T014 [US1] Generar la migración con `uv run alembic revision --autogenerate -m "crear tabla de productos"` en `alembic/versions/`. Revisarla a mano: índice parcial con `sqlite_where`/`postgresql_where`, CHECK con nombre y `downgrade` que borra índice y tabla
+- [ ] T014 [US1] Generar la migración con `uv run alembic revision --autogenerate -m "crear tabla de productos"` en `migrations/versions/`. Revisarla a mano: índice parcial con `sqlite_where`/`postgresql_where`, CHECK con nombre y `downgrade` que borra índice y tabla
 - [ ] T015 [US1] Implementar `app/repositories/catalog.py`: `get_product(session, product_id) -> Product | None`, `list_products(session, include_inactive: bool) -> list[Product]` (orden por `name_key`), `find_active_product_by_key(session, name_key, exclude_id: int | None) -> Product | None` y `save(session, obj) -> obj` (`add` + `commit` + `refresh`)
 - [ ] T016 [US1] Implementar `app/services/catalog.py`: los errores de dominio `ProductNotFoundError` y `DuplicateProductError`, y las funciones `create_product`, `list_products` y `get_product` según contracts/catalog-service.md. Al crear, verifica duplicados con `find_active_product_by_key`; al guardar, captura `IntegrityError`, hace `rollback` y lanza `DuplicateProductError`
 - [ ] T017 [US1] Implementar `app/routers/catalog.py`:

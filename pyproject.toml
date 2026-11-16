@@ -5,6 +5,7 @@ description = "Registro y seguimiento de pedidos para emprendimientos, con extra
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.20.1",
     "fastapi[standard]>=0.115",
     "psycopg[binary]>=3.3.9",
     "pydantic-settings>=2.6",

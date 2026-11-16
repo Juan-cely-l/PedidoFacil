@@ -5,7 +5,7 @@ Decisiones técnicas tomadas para el plan. Ninguna queda marcada como pendiente 
 ## R1. Primeras tablas: Alembic entra en esta historia
 
 - **Decisión**: agregar `alembic` (`uv add alembic`), con `alembic.ini` en la raíz y el directorio
-  `alembic/`. `env.py` toma la URL de `Settings` y reutiliza `build_engine` de `app/db.py`, así
+  `migrations/` (la ruta que protege `.claude/hooks/guard_files.py`). `env.py` toma la URL de `Settings` y reutiliza `build_engine` de `app/db.py`, así
   local (SQLite) y producción (Neon) siguen la misma regla de driver y timeout. `target_metadata =
   SQLModel.metadata`, importando `app.models` para registrar las tablas. Para SQLite se activa
   `render_as_batch=True`, porque SQLite no admite la mayoría de `ALTER TABLE`.
@@ -18,7 +18,7 @@ Decisiones técnicas tomadas para el plan. Ninguna queda marcada como pendiente 
 ## R2. Las migraciones se prueban contra los modelos
 
 - **Decisión**: una prueba de integración ejecuta `alembic upgrade head` sobre SQLite **en
-  memoria** (constitución, principio II). `alembic/env.py` usa la conexión que reciba en
+  memoria** (constitución, principio II). `migrations/env.py` usa la conexión que reciba en
   `config.attributes["connection"]` (receta de la documentación de Alembic) y solo crea su propio
   motor si no recibe ninguna. La prueba abre una conexión sobre `build_engine("sqlite://")`, se la
   pasa a Alembic y compara el esquema resultante con `SQLModel.metadata`
