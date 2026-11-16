@@ -9,10 +9,15 @@ import os
 from collections.abc import Iterator
 
 import pytest
+from fastapi.testclient import TestClient
+from sqlmodel import Session, SQLModel
+
+import app.models  # noqa: F401  (registra las tablas en SQLModel.metadata)
 
 # app.config no tiene efectos al importarse; app.main sí (crea la app), por eso ninguna prueba
 # lo importa a nivel de módulo antes de que se fije ENVIRONMENT aquí.
 from app.config import Settings
+from app.db import build_engine
 
 os.environ["ENVIRONMENT"] = "test"
 
@@ -48,6 +53,30 @@ def app_log(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCaptureFixtu
 def test_settings() -> Settings:
     """Configuración del ambiente de pruebas, sin leer ningún archivo .env."""
     return Settings(_env_file=None, environment="test")
+
+
+@pytest.fixture
+def session() -> Iterator[Session]:
+    """Sesión sobre SQLite en memoria con todas las tablas.
+
+    `create_all` solo se usa en las pruebas; en la app las tablas las crea Alembic.
+    """
+    engine = build_engine("sqlite://")
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as db_session:
+        yield db_session
+    engine.dispose()
+
+
+@pytest.fixture
+def client(test_settings: Settings) -> Iterator[TestClient]:
+    """Cliente HTTP de una app de pruebas con las tablas creadas en su base en memoria."""
+    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+
+    application = create_app(test_settings)
+    SQLModel.metadata.create_all(application.state.engine)
+    with TestClient(application) as test_client:
+        yield test_client
 
 
 @pytest.fixture
