@@ -94,25 +94,25 @@ listado con su precio formateado.
 
 ### Pruebas de la Historia 1 ⚠️
 
-- [ ] T009 [P] [US1] Prueba en `tests/unit/test_catalog_rules.py` para `ProductInput` (data-model.md):
+- [X] T009 [P] [US1] Prueba en `tests/unit/test_catalog_rules.py` para `ProductInput` (data-model.md):
   - `name` se guarda con `clean_text`; vacío o solo espacios → «El nombre es obligatorio»; más de 100 caracteres → «El nombre admite máximo 100 caracteres».
   - `description` es opcional (por defecto `""`) y con más de 200 caracteres → «La descripción admite máximo 200 caracteres».
   - `price` (texto) pasa por `parse_price`: `"45.000"` → `45000` y `"45,5"` → error en el campo `price`.
   - `tracks_inventory` vale `False` por defecto.
   - Si varios campos fallan, `ValidationError.errors()` trae un error por campo, con `loc` igual al nombre del campo.
-- [ ] T010 [P] [US1] Prueba en `tests/integration/test_migrations.py` (R2, SQLite en memoria según el principio II):
+- [X] T010 [P] [US1] Prueba en `tests/integration/test_migrations.py` (R2, SQLite en memoria según el principio II):
   - Preparación: `cfg = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))`, para no depender del directorio de trabajo; `engine = build_engine("sqlite://")`; dentro de `with engine.begin() as conn:`, asignar `cfg.attributes["connection"] = conn`.
   - `command.upgrade(cfg, "head")` deja la tabla `product`, y `compare_metadata(MigrationContext.configure(conn), SQLModel.metadata)` devuelve `[]`.
   - Insertar con SQL un `product` con `price = 0` dentro de `conn.begin_nested()` lanza `IntegrityError` (CHECK).
   - `command.downgrade(cfg, "base")` deja la base sin tablas del catálogo.
-- [ ] T011 [P] [US1] Prueba en `tests/unit/test_catalog_service.py` (fixture `session`, contracts/catalog-service.md):
+- [X] T011 [P] [US1] Prueba en `tests/unit/test_catalog_service.py` (fixture `session`, contracts/catalog-service.md):
   - `create_product` guarda el `name_key` normalizado y `is_active=True`.
   - Un segundo «brownie » activo → `DuplicateProductError`.
   - Un producto inactivo (marcado `is_active=False` directamente en la sesión) no impide crear otro con el mismo nombre.
   - `list_products` devuelve los activos ordenados por nombre sin distinguir mayúsculas; con `include_inactive=True` incluye los inactivos.
   - `get_product(session, 999)` → `ProductNotFoundError`.
   - Dos guardados simultáneos: con `monkeypatch.setattr(repositories.catalog, "find_active_product_by_key", lambda *a, **k: None)`, crear «Brownie» dos veces. El segundo choca con el índice parcial (`IntegrityError`) y el servicio lanza `DuplicateProductError`; la sesión sigue usable después (se hizo `rollback`).
-- [ ] T012 [P] [US1] Prueba en `tests/integration/test_catalog_pages.py` (fixture `client`, contracts/catalog-pages.md):
+- [X] T012 [P] [US1] Prueba en `tests/integration/test_catalog_pages.py` (fixture `client`, contracts/catalog-pages.md):
   - `GET /productos` sin productos → 200 con un texto de lista vacía y enlace a `/productos/nuevo`.
   - `GET /productos/nuevo` → 200 con los campos `name`, `description`, `price` y `tracks_inventory`.
   - `POST /productos` válido → 303 con `Location: /productos/{id}`, y el detalle muestra nombre, descripción, `$ 45.000` y «Controla inventario: sí».
@@ -127,7 +127,7 @@ listado con su precio formateado.
 
 ### Implementación de la Historia 1
 
-- [ ] T013 [US1] Implementar en `app/models/catalog.py`:
+- [X] T013 [US1] Implementar en `app/models/catalog.py`:
   - `Product(SQLModel, table=True)`, tabla `product`, según data-model.md:
     - `id`: entero, PK.
     - `name` y `name_key`: `max_length=100`.
@@ -137,10 +137,10 @@ listado con su precio formateado.
     - `__table_args__`: `CheckConstraint("price > 0 AND price <= 100000000", name="ck_product_price_range")` y `Index("ux_product_active_name", "name_key", unique=True, sqlite_where=text("is_active"), postgresql_where=text("is_active"))`.
   - `ProductInput(BaseModel)` con los validadores de T009.
   - Exportar ambos en `app/models/__init__.py`.
-- [ ] T014 [US1] Generar la migración con `uv run alembic revision --autogenerate -m "crear tabla de productos"` en `migrations/versions/`. Revisarla a mano: índice parcial con `sqlite_where`/`postgresql_where`, CHECK con nombre y `downgrade` que borra índice y tabla
-- [ ] T015 [US1] Implementar `app/repositories/catalog.py`: `get_product(session, product_id) -> Product | None`, `list_products(session, include_inactive: bool) -> list[Product]` (orden por `name_key`), `find_active_product_by_key(session, name_key, exclude_id: int | None) -> Product | None` y `save(session, obj) -> obj` (`add` + `commit` + `refresh`)
-- [ ] T016 [US1] Implementar `app/services/catalog.py`: los errores de dominio `ProductNotFoundError` y `DuplicateProductError`, y las funciones `create_product`, `list_products` y `get_product` según contracts/catalog-service.md. Al crear, verifica duplicados con `find_active_product_by_key`; al guardar, captura `IntegrityError`, hace `rollback` y lanza `DuplicateProductError`
-- [ ] T017 [US1] Implementar `app/routers/catalog.py`:
+- [X] T014 [US1] Generar la migración con `uv run alembic revision --autogenerate -m "crear tabla de productos"` en `migrations/versions/`. Revisarla a mano: índice parcial con `sqlite_where`/`postgresql_where`, CHECK con nombre y `downgrade` que borra índice y tabla
+- [X] T015 [US1] Implementar `app/repositories/catalog.py`: `get_product(session, product_id) -> Product | None`, `list_products(session, include_inactive: bool) -> list[Product]` (orden por `name_key`), `find_active_product_by_key(session, name_key, exclude_id: int | None) -> Product | None` y `save(session, obj) -> obj` (`add` + `commit` + `refresh`)
+- [X] T016 [US1] Implementar `app/services/catalog.py`: los errores de dominio `ProductNotFoundError` y `DuplicateProductError`, y las funciones `create_product`, `list_products` y `get_product` según contracts/catalog-service.md. Al crear, verifica duplicados con `find_active_product_by_key`; al guardar, captura `IntegrityError`, hace `rollback` y lanza `DuplicateProductError`
+- [X] T017 [US1] Implementar `app/routers/catalog.py`:
   - Rutas `GET /productos`, `GET /productos/nuevo`, `POST /productos` y `GET /productos/{product_id}`.
   - El formulario se lee con `Annotated[str, Form()]`; `tracks_inventory` es `Annotated[bool, Form()] = False`.
   - Se construye `ProductInput`; un `ValidationError` se convierte en un diccionario `{campo: mensaje}` y se responde 422 con la plantilla y los valores escritos. `DuplicateProductError` → 409; `ProductNotFoundError` → 404.

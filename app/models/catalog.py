@@ -3,11 +3,18 @@
 import re
 import unicodedata
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_core import PydanticCustomError
+from sqlalchemy import CheckConstraint, Index, text
 from sqlmodel import Field, SQLModel
 
 MAX_PRICE = 100_000_000
+NAME_MAX_LENGTH = 100
+DESCRIPTION_MAX_LENGTH = 200
+
+NAME_REQUIRED_MESSAGE = "El nombre es obligatorio"
+NAME_TOO_LONG_MESSAGE = "El nombre admite máximo 100 caracteres"
+DESCRIPTION_TOO_LONG_MESSAGE = "La descripción admite máximo 200 caracteres"
 
 PRICE_INVALID_MESSAGE = "El precio debe ser un número entero mayor que cero"
 PRICE_GROUPING_MESSAGE = (
@@ -68,10 +75,22 @@ def normalize_key(text: str) -> str:
 class Product(SQLModel, table=True):
     """Algo que vende el negocio, con su precio en pesos enteros."""
 
+    __table_args__ = (
+        CheckConstraint(f"price > 0 AND price <= {MAX_PRICE}", name="ck_product_price_range"),
+        # Solo entre activos: un producto desactivado puede repetir nombre.
+        Index(
+            "ux_product_active_name",
+            "name_key",
+            unique=True,
+            sqlite_where=text("is_active"),
+            postgresql_where=text("is_active"),
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(max_length=100)
-    name_key: str = Field(max_length=100)
-    description: str = Field(default="", max_length=200)
+    name: str = Field(max_length=NAME_MAX_LENGTH)
+    name_key: str = Field(max_length=NAME_MAX_LENGTH)
+    description: str = Field(default="", max_length=DESCRIPTION_MAX_LENGTH)
     price: int
     tracks_inventory: bool = False
     is_active: bool = True
@@ -84,3 +103,26 @@ class ProductInput(BaseModel):
     description: str = ""
     price: int
     tracks_inventory: bool = False
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        name = clean_text(value)
+        if not name:
+            raise PydanticCustomError("name_required", NAME_REQUIRED_MESSAGE)
+        if len(name) > NAME_MAX_LENGTH:
+            raise PydanticCustomError("name_too_long", NAME_TOO_LONG_MESSAGE)
+        return name
+
+    @field_validator("description")
+    @classmethod
+    def _validate_description(cls, value: str) -> str:
+        description = value.strip()
+        if len(description) > DESCRIPTION_MAX_LENGTH:
+            raise PydanticCustomError("description_too_long", DESCRIPTION_TOO_LONG_MESSAGE)
+        return description
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _validate_price(cls, value: object) -> int:
+        return parse_price(str(value))
