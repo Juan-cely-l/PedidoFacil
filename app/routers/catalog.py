@@ -106,7 +106,10 @@ def create_product(
         return _product_form(
             request, form, {"name": DUPLICATE_PRODUCT_MESSAGE}, status.HTTP_409_CONFLICT
         )
-    return RedirectResponse(f"/productos/{product.id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        request.app.url_path_for("product_detail", product_id=product.id),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get(
@@ -154,7 +157,10 @@ def add_variant(
         return _detail(
             request, product, form, {"value": DUPLICATE_VARIANT_MESSAGE}, status.HTTP_409_CONFLICT
         )
-    return RedirectResponse(f"/productos/{product_id}", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(
+        request.app.url_path_for("product_detail", product_id=product_id),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 
 
 def _get_product_or_404(session: Session, product_id: int) -> Product:
