@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from enum import StrEnum
 
 from pydantic import BaseModel, field_validator
 from pydantic_core import PydanticCustomError
@@ -126,3 +127,49 @@ class ProductInput(BaseModel):
     @classmethod
     def _validate_price(cls, value: object) -> int:
         return parse_price(str(value))
+
+
+class VariantKind(StrEnum):
+    """Tipos de variante admitidos (se guardan como texto en la base)."""
+
+    SABOR = "sabor"
+    PESO = "peso"
+    COLOR = "color"
+    MARCA = "marca"
+    TAMANO = "tamano"
+
+    @property
+    def label(self) -> str:
+        """Nombre para mostrar en la interfaz."""
+        raise NotImplementedError
+
+
+class ProductVariant(SQLModel, table=True):
+    """Presentación de un producto (sabor, peso, color, marca o tamaño)."""
+
+    __tablename__ = "product_variant"
+
+    id: int | None = Field(default=None, primary_key=True)
+    product_id: int = Field(foreign_key="product.id")
+    kind: str = Field(max_length=10)
+    value: str = Field(max_length=50)
+    value_key: str = Field(max_length=50)
+    price: int | None = None
+    is_active: bool = True
+
+
+class VariantInput(BaseModel):
+    """Datos del formulario de variante, ya validados."""
+
+    kind: VariantKind
+    value: str
+    price: int | None = None
+
+
+class QuotableItem(BaseModel):
+    """Algo que se puede cotizar, con su precio efectivo en pesos."""
+
+    product_id: int
+    variant_id: int | None
+    label: str
+    unit_price: int

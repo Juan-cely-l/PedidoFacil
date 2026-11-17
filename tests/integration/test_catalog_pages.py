@@ -13,6 +13,7 @@ from app.models.catalog import (
 )
 
 DUPLICATE_PRODUCT_MESSAGE = "Ya existe un producto activo con ese nombre"
+DUPLICATE_VARIANT_MESSAGE = "Ese producto ya tiene una variante activa con ese tipo y valor"
 
 
 def create_product(client: TestClient, **fields: str) -> httpx2.Response:
@@ -131,3 +132,86 @@ def test_nombre_con_html_se_muestra_escapado(client: TestClient) -> None:
 
     assert "&lt;script&gt;" in html
     assert "<script>alert(1)</script>" not in html
+
+
+# Variantes desde el detalle del producto (T021)
+
+
+def create_coffee(client: TestClient) -> str:
+    """Crea «Café» a $ 18.000 y devuelve la ruta de su detalle."""
+    response = create_product(client, name="Café", description="", price="18.000")
+    assert response.status_code == 303
+    return str(response.headers["location"])
+
+
+def add_variant(client: TestClient, detail_path: str, **fields: str) -> httpx2.Response:
+    data = {"kind": "peso", "value": "500 g", "price": ""} | fields
+    return client.post(f"{detail_path}/variantes", data=data, follow_redirects=False)
+
+
+def test_agregar_variantes_muestra_su_precio_efectivo_en_el_detalle(client: TestClient) -> None:
+    coffee = create_coffee(client)
+
+    first = add_variant(client, coffee, value="250 g")
+    second = add_variant(client, coffee, value="500 g", price="32.000")
+
+    for response in (first, second):
+        assert response.status_code == 303
+        assert response.headers["location"] == coffee
+    html = client.get(coffee).text
+    assert "Peso: 250 g — $ 18.000" in html
+    assert "Peso: 500 g — $ 32.000" in html
+
+
+def test_variante_repetida_responde_conflicto_y_conserva_lo_escrito(client: TestClient) -> None:
+    coffee = create_coffee(client)
+    add_variant(client, coffee, value="500 g")
+
+    response = add_variant(client, coffee, value="500 G ")
+
+    assert response.status_code == 409
+    assert DUPLICATE_VARIANT_MESSAGE in response.text
+    assert 'value="500 G "' in response.text
+    assert '<option value="peso" selected>' in response.text
+
+
+def test_tipo_de_variante_desconocido_responde_422(client: TestClient) -> None:
+    coffee = create_coffee(client)
+
+    response = add_variant(client, coffee, kind="talla")
+
+    assert response.status_code == 422
+    assert "Elige un tipo de variante válido" in response.text
+
+
+def test_precio_de_variante_invalido_conserva_lo_escrito(client: TestClient) -> None:
+    coffee = create_coffee(client)
+
+    response = add_variant(client, coffee, value="250 g", price="45,5")
+
+    assert response.status_code == 422
+    assert PRICE_INVALID_MESSAGE in response.text
+    assert 'value="250 g"' in response.text
+    assert 'value="45,5"' in response.text
+    assert 'aria-invalid="true"' in response.text
+
+
+def test_variante_de_producto_inexistente_responde_404(client: TestClient) -> None:
+    response = add_variant(client, "/productos/999")
+
+    # El mensaje de dominio distingue «el producto no existe» de «la ruta no existe» (Not Found).
+    assert response.status_code == 404
+    assert response.json() == {"detail": "El producto no existe"}
+
+
+def test_detalle_ofrece_los_cinco_tipos_de_variante(client: TestClient) -> None:
+    html = client.get(create_coffee(client)).text
+
+    for kind, label in [
+        ("sabor", "Sabor"),
+        ("peso", "Peso"),
+        ("color", "Color"),
+        ("marca", "Marca"),
+        ("tamano", "Tamaño"),
+    ]:
+        assert f'<option value="{kind}">{label}</option>' in html

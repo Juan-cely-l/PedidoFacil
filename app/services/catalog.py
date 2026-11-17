@@ -7,7 +7,14 @@ acceso a datos queda en `app.repositories.catalog`.
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
-from app.models.catalog import Product, ProductInput, normalize_key
+from app.models.catalog import (
+    Product,
+    ProductInput,
+    ProductVariant,
+    QuotableItem,
+    VariantInput,
+    normalize_key,
+)
 from app.repositories import catalog as repository
 
 
@@ -17,6 +24,10 @@ class ProductNotFoundError(Exception):
 
 class DuplicateProductError(Exception):
     """Ya existe un producto activo con ese nombre."""
+
+
+class DuplicateVariantError(Exception):
+    """El producto ya tiene una variante activa con ese tipo y valor."""
 
 
 def create_product(session: Session, data: ProductInput) -> Product:
@@ -43,6 +54,21 @@ def get_product(session: Session, product_id: int) -> Product:
     if product is None:
         raise ProductNotFoundError(product_id)
     return product
+
+
+def add_variant(session: Session, product_id: int, data: VariantInput) -> ProductVariant:
+    """Agrega una variante activa al producto."""
+    raise NotImplementedError
+
+
+def effective_price(product: Product, variant: ProductVariant) -> int:
+    """Precio propio de la variante o, si no tiene, el del producto."""
+    raise NotImplementedError
+
+
+def list_quotable_items(session: Session) -> list[QuotableItem]:
+    """Lo que se puede cotizar hoy, con su precio efectivo (única fuente de precios)."""
+    raise NotImplementedError
 
 
 def _ensure_unique_name(session: Session, name_key: str) -> None:

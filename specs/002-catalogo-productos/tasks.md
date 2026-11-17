@@ -168,7 +168,7 @@ comprobar el precio efectivo en el detalle y en `list_quotable_items`.
   - `price` vacío o con solo espacios → `None`; `"32.000"` → `32000`; `"45,5"` → mensaje de precio inválido.
   - `VariantKind.TAMANO.label == "Tamaño"`.
   - `effective_price(product(price=18000), variant(price=None)) == 18000` y con `variant(price=32000)` da `32000`.
-- [ ] T019 [P] [US2] Ampliar `tests/integration/test_migrations.py` (misma conexión en memoria que T010): tras `upgrade head` existe `product_variant`, `compare_metadata` sigue devolviendo `[]` y un `kind` fuera de la lista, insertado con SQL dentro de `conn.begin_nested()`, lanza `IntegrityError`
+- [ ] T019 [P] [US2] Ampliar `tests/integration/test_migrations.py` (misma conexión en memoria que T010): tras `upgrade head` existe `product_variant`, `compare_metadata` sigue devolviendo `[]` y un `kind` fuera de la lista, insertado con SQL, lanza `IntegrityError`. **Nota de implementación**: no se usa `conn.begin_nested()` (aquí ni en T010). Con el driver `pysqlite`, SQLAlchemy no emite `BEGIN` ni `SAVEPOINT` de forma fiable sin configuración adicional de eventos, y no hace falta: en SQLite una sentencia que viola una restricción se revierte sola y no invalida la transacción en curso (a diferencia de PostgreSQL), así que la prueba puede seguir usando la conexión después del `IntegrityError`
 - [ ] T020 [P] [US2] Prueba en `tests/unit/test_catalog_service.py`:
   - `add_variant` guarda `value_key`.
   - Peso «500 G » repetido en el mismo producto → `DuplicateVariantError`.

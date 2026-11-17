@@ -2,7 +2,7 @@
 
 from sqlmodel import Session, col, select
 
-from app.models.catalog import Product
+from app.models.catalog import Product, ProductVariant
 
 
 def get_product(session: Session, product_id: int) -> Product | None:
@@ -30,3 +30,10 @@ def save(session: Session, product: Product) -> Product:
     session.commit()
     session.refresh(product)
     return product
+
+
+def find_active_variant(
+    session: Session, product_id: int, kind: str, value_key: str
+) -> ProductVariant | None:
+    """Variante activa del producto con ese tipo y valor."""
+    raise NotImplementedError
