@@ -1,6 +1,7 @@
 """Consultas y persistencia del catálogo."""
 
-from sqlmodel import Session, col, select
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, SQLModel, col, select
 
 from app.models.catalog import Product, ProductVariant
 
@@ -24,16 +25,30 @@ def find_active_product_by_key(session: Session, name_key: str) -> Product | Non
     return session.exec(statement).first()
 
 
-def save(session: Session, product: Product) -> Product:
-    """Guarda el producto y lo devuelve con su id."""
-    session.add(product)
+def save[Model: SQLModel](session: Session, obj: Model) -> Model:
+    """Guarda el registro y lo devuelve con su id."""
+    session.add(obj)
     session.commit()
-    session.refresh(product)
-    return product
+    session.refresh(obj)
+    return obj
 
 
 def find_active_variant(
     session: Session, product_id: int, kind: str, value_key: str
 ) -> ProductVariant | None:
     """Variante activa del producto con ese tipo y valor."""
-    raise NotImplementedError
+    statement = select(ProductVariant).where(
+        col(ProductVariant.product_id) == product_id,
+        col(ProductVariant.kind) == kind,
+        col(ProductVariant.value_key) == value_key,
+        col(ProductVariant.is_active),
+    )
+    return session.exec(statement).first()
+
+
+def list_active_products_with_variants(session: Session) -> list[Product]:
+    """Productos activos con sus variantes cargadas en una sola consulta extra (sin N+1)."""
+    statement = (
+        select(Product).where(col(Product.is_active)).options(selectinload(Product.variants))  # type: ignore[arg-type]
+    )
+    return list(session.exec(statement).all())

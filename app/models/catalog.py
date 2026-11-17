@@ -7,15 +7,19 @@ from enum import StrEnum
 from pydantic import BaseModel, field_validator
 from pydantic_core import PydanticCustomError
 from sqlalchemy import CheckConstraint, Index, text
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 MAX_PRICE = 100_000_000
 NAME_MAX_LENGTH = 100
 DESCRIPTION_MAX_LENGTH = 200
+VARIANT_VALUE_MAX_LENGTH = 50
 
 NAME_REQUIRED_MESSAGE = "El nombre es obligatorio"
 NAME_TOO_LONG_MESSAGE = "El nombre admite máximo 100 caracteres"
 DESCRIPTION_TOO_LONG_MESSAGE = "La descripción admite máximo 200 caracteres"
+VARIANT_KIND_INVALID_MESSAGE = "Elige un tipo de variante válido"
+VARIANT_VALUE_REQUIRED_MESSAGE = "El valor de la variante es obligatorio"
+VARIANT_VALUE_TOO_LONG_MESSAGE = "El valor admite máximo 50 caracteres"
 
 PRICE_INVALID_MESSAGE = "El precio debe ser un número entero mayor que cero"
 PRICE_GROUPING_MESSAGE = (
@@ -96,6 +100,8 @@ class Product(SQLModel, table=True):
     tracks_inventory: bool = False
     is_active: bool = True
 
+    variants: list["ProductVariant"] = Relationship(back_populates="product")
+
 
 class ProductInput(BaseModel):
     """Datos del formulario de producto, ya validados (equivale a un DTO con Bean Validation)."""
@@ -141,21 +147,57 @@ class VariantKind(StrEnum):
     @property
     def label(self) -> str:
         """Nombre para mostrar en la interfaz."""
-        raise NotImplementedError
+        return _VARIANT_KIND_LABELS[self]
+
+
+_VARIANT_KIND_LABELS = {
+    VariantKind.SABOR: "Sabor",
+    VariantKind.PESO: "Peso",
+    VariantKind.COLOR: "Color",
+    VariantKind.MARCA: "Marca",
+    VariantKind.TAMANO: "Tamaño",
+}
+_VARIANT_KINDS_SQL = ", ".join(f"'{kind.value}'" for kind in VariantKind)
 
 
 class ProductVariant(SQLModel, table=True):
     """Presentación de un producto (sabor, peso, color, marca o tamaño)."""
 
     __tablename__ = "product_variant"
+    __table_args__ = (
+        CheckConstraint(
+            f"price IS NULL OR (price > 0 AND price <= {MAX_PRICE})",
+            name="ck_variant_price_range",
+        ),
+        CheckConstraint(f"kind IN ({_VARIANT_KINDS_SQL})", name="ck_variant_kind"),
+        # Solo entre activas: una variante desactivada puede repetirse.
+        Index(
+            "ux_variant_active_kind_value",
+            "product_id",
+            "kind",
+            "value_key",
+            unique=True,
+            sqlite_where=text("is_active"),
+            postgresql_where=text("is_active"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
-    product_id: int = Field(foreign_key="product.id")
+    # RESTRICT: nunca hay borrado definitivo; un producto con variantes no se puede borrar.
+    product_id: int = Field(foreign_key="product.id", ondelete="RESTRICT", index=True)
     kind: str = Field(max_length=10)
-    value: str = Field(max_length=50)
-    value_key: str = Field(max_length=50)
+    value: str = Field(max_length=VARIANT_VALUE_MAX_LENGTH)
+    value_key: str = Field(max_length=VARIANT_VALUE_MAX_LENGTH)
+    # None: usa el precio vigente del producto.
     price: int | None = None
     is_active: bool = True
+
+    product: Product | None = Relationship(back_populates="variants")
+
+    @property
+    def label(self) -> str:
+        """Tipo y valor para mostrar: «Peso: 500 g»."""
+        return f"{VariantKind(self.kind).label}: {self.value}"
 
 
 class VariantInput(BaseModel):
@@ -164,6 +206,33 @@ class VariantInput(BaseModel):
     kind: VariantKind
     value: str
     price: int | None = None
+
+    @field_validator("kind", mode="before")
+    @classmethod
+    def _validate_kind(cls, value: object) -> VariantKind:
+        try:
+            return VariantKind(str(value))
+        except ValueError:
+            raise PydanticCustomError("variant_kind", VARIANT_KIND_INVALID_MESSAGE) from None
+
+    @field_validator("value")
+    @classmethod
+    def _validate_value(cls, value: str) -> str:
+        cleaned = clean_text(value)
+        if not cleaned:
+            raise PydanticCustomError("variant_value_required", VARIANT_VALUE_REQUIRED_MESSAGE)
+        if len(cleaned) > VARIANT_VALUE_MAX_LENGTH:
+            raise PydanticCustomError("variant_value_too_long", VARIANT_VALUE_TOO_LONG_MESSAGE)
+        return cleaned
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _validate_price(cls, value: object) -> int | None:
+        """Vacío significa «usa el precio del producto»; si no, las reglas de siempre."""
+        text_value = "" if value is None else str(value)
+        if not text_value.strip():
+            return None
+        return parse_price(text_value)
 
 
 class QuotableItem(BaseModel):

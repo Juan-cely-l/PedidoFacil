@@ -1,0 +1,3 @@
+{# Marcas de error junto a cada campo; se importa "with context" para leer `errors`. #}
+{% macro invalid(field) %}{% if errors.get(field) %} aria-invalid="true" aria-describedby="{{ field }}-error"{% endif %}{% endmacro %}
+{% macro error(field) %}{% if errors.get(field) %}<small id="{{ field }}-error">{{ errors[field] }}</small>{% endif %}{% endmacro %}

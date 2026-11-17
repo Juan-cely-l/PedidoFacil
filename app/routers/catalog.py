@@ -12,11 +12,13 @@ from pydantic import BaseModel, ValidationError
 from sqlmodel import Session
 
 from app.db import get_session
-from app.models.catalog import ProductInput
+from app.models.catalog import Product, ProductInput, VariantInput, VariantKind
 from app.services import catalog
 from app.templating import templates
 
 DUPLICATE_PRODUCT_MESSAGE = "Ya existe un producto activo con ese nombre"
+DUPLICATE_VARIANT_MESSAGE = "Ese producto ya tiene una variante activa con ese tipo y valor"
+PRODUCT_NOT_FOUND_MESSAGE = "El producto no existe"
 
 router = APIRouter(prefix="/productos", tags=["catálogo"])
 
@@ -34,6 +36,15 @@ class ProductForm(BaseModel):
     price: str = ""
     # Una casilla sin marcar no se envía en el formulario.
     tracks_inventory: bool = False
+
+
+class VariantForm(BaseModel):
+    """Lo que llega del formulario de variante, tal cual se escribió."""
+
+    kind: str = ""
+    value: str = ""
+    # Vacío: la variante usa el precio del producto.
+    price: str = ""
 
 
 def _field_errors(error: ValidationError) -> dict[str, str]:
@@ -101,12 +112,77 @@ def create_product(
 @router.get(
     "/{product_id}",
     response_class=HTMLResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"description": "El producto no existe"}},
+    responses={status.HTTP_404_NOT_FOUND: {"description": PRODUCT_NOT_FOUND_MESSAGE}},
 )
 def product_detail(request: Request, session: SessionDep, product_id: int) -> HTMLResponse:
-    """Detalle del producto."""
+    """Detalle del producto con sus variantes y el formulario para agregar una."""
+    product = _get_product_or_404(session, product_id)
+    return _detail(request, product, VariantForm().model_dump(), {})
+
+
+@router.post(
+    "/{product_id}/variantes",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": PRODUCT_NOT_FOUND_MESSAGE},
+        status.HTTP_409_CONFLICT: {"description": "Variante activa repetida"},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Datos inválidos"},
+    },
+)
+def add_variant(
+    request: Request,
+    session: SessionDep,
+    product_id: int,
+    submitted: Annotated[VariantForm, Form()],
+) -> Response:
+    """Agrega una variante y vuelve al detalle del producto."""
+    form = submitted.model_dump()
     try:
-        product = catalog.get_product(session, product_id)
+        data = VariantInput.model_validate(form)
+    except ValidationError as error:
+        product = _get_product_or_404(session, product_id)
+        return _detail(
+            request, product, form, _field_errors(error), status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+    try:
+        catalog.add_variant(session, product_id, data)
     except catalog.ProductNotFoundError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "El producto no existe") from error
-    return templates.TemplateResponse(request, "catalog/detail.html", {"product": product})
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PRODUCT_NOT_FOUND_MESSAGE) from error
+    except catalog.DuplicateVariantError:
+        product = _get_product_or_404(session, product_id)
+        return _detail(
+            request, product, form, {"value": DUPLICATE_VARIANT_MESSAGE}, status.HTTP_409_CONFLICT
+        )
+    return RedirectResponse(f"/productos/{product_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def _get_product_or_404(session: Session, product_id: int) -> Product:
+    try:
+        return catalog.get_product(session, product_id)
+    except catalog.ProductNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PRODUCT_NOT_FOUND_MESSAGE) from error
+
+
+def _detail(
+    request: Request,
+    product: Product,
+    variant_form: dict[str, Any],
+    variant_errors: dict[str, str],
+    status_code: int = status.HTTP_200_OK,
+) -> HTMLResponse:
+    """Detalle del producto; el precio efectivo de cada variante lo calcula el servicio."""
+    variants = sorted(product.variants, key=lambda variant: (variant.kind, variant.value_key))
+    rows = [(variant, catalog.effective_price(product, variant)) for variant in variants]
+    return templates.TemplateResponse(
+        request,
+        "catalog/detail.html",
+        {
+            "product": product,
+            "variant_rows": rows,
+            "variant_kinds": list(VariantKind),
+            "form": variant_form,
+            "errors": variant_errors,
+        },
+        status_code=status_code,
+    )
