@@ -73,9 +73,56 @@ def test_la_base_rechaza_dos_productos_activos_con_la_misma_clave(
         connection.execute(insert, {"name": "brownie", "active": True})
 
 
+def test_migraciones_crean_la_tabla_de_variantes(connection: Connection) -> None:
+    assert "product_variant" in inspect(connection).get_table_names()
+
+
+def _insert_coffee(connection: Connection) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO product (id, name, name_key, description, price, tracks_inventory, "
+            "is_active) VALUES (1, 'Café', 'cafe', '', 18000, 0, 1)"
+        )
+    )
+
+
+INSERT_VARIANT = text(
+    "INSERT INTO product_variant (product_id, kind, value, value_key, price, is_active) "
+    "VALUES (1, :kind, '500 g', '500 g', :price, :active)"
+)
+
+
+def test_la_base_rechaza_un_tipo_de_variante_desconocido(connection: Connection) -> None:
+    _insert_coffee(connection)
+
+    # En SQLite, una sentencia fallida no invalida la transacción en curso (como en T010).
+    with pytest.raises(IntegrityError):
+        connection.execute(INSERT_VARIANT, {"kind": "talla", "price": None, "active": True})
+
+
+def test_la_base_rechaza_una_variante_con_precio_cero(connection: Connection) -> None:
+    _insert_coffee(connection)
+
+    with pytest.raises(IntegrityError):
+        connection.execute(INSERT_VARIANT, {"kind": "peso", "price": 0, "active": True})
+
+
+def test_la_base_rechaza_dos_variantes_activas_iguales_del_mismo_producto(
+    connection: Connection,
+) -> None:
+    _insert_coffee(connection)
+    connection.execute(INSERT_VARIANT, {"kind": "peso", "price": None, "active": False})
+    connection.execute(INSERT_VARIANT, {"kind": "peso", "price": None, "active": True})
+
+    with pytest.raises(IntegrityError):
+        connection.execute(INSERT_VARIANT, {"kind": "peso", "price": 32000, "active": True})
+
+
 def test_downgrade_elimina_las_tablas_del_catalogo(
     alembic_config: Config, connection: Connection
 ) -> None:
     command.downgrade(alembic_config, "base")
 
-    assert "product" not in inspect(connection).get_table_names()
+    tables = inspect(connection).get_table_names()
+    assert "product" not in tables
+    assert "product_variant" not in tables

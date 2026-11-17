@@ -162,14 +162,14 @@ comprobar el precio efectivo en el detalle y en `list_quotable_items`.
 
 ### Pruebas de la Historia 2 ⚠️
 
-- [ ] T018 [P] [US2] Prueba en `tests/unit/test_catalog_rules.py` para `VariantInput` y `effective_price`:
+- [X] T018 [P] [US2] Prueba en `tests/unit/test_catalog_rules.py` para `VariantInput` y `effective_price`:
   - `kind` acepta `sabor`, `peso`, `color`, `marca` y `tamano`; otro valor → «Elige un tipo de variante válido».
   - `value` usa `clean_text`; vacío → «El valor de la variante es obligatorio»; más de 50 caracteres → «El valor admite máximo 50 caracteres».
   - `price` vacío o con solo espacios → `None`; `"32.000"` → `32000`; `"45,5"` → mensaje de precio inválido.
   - `VariantKind.TAMANO.label == "Tamaño"`.
   - `effective_price(product(price=18000), variant(price=None)) == 18000` y con `variant(price=32000)` da `32000`.
-- [ ] T019 [P] [US2] Ampliar `tests/integration/test_migrations.py` (misma conexión en memoria que T010): tras `upgrade head` existe `product_variant`, `compare_metadata` sigue devolviendo `[]` y un `kind` fuera de la lista, insertado con SQL dentro de `conn.begin_nested()`, lanza `IntegrityError`
-- [ ] T020 [P] [US2] Prueba en `tests/unit/test_catalog_service.py`:
+- [X] T019 [P] [US2] Ampliar `tests/integration/test_migrations.py` (misma conexión en memoria que T010): tras `upgrade head` existe `product_variant`, `compare_metadata` sigue devolviendo `[]` y un `kind` fuera de la lista, insertado con SQL, lanza `IntegrityError`. **Nota de implementación**: no se usa `conn.begin_nested()` (aquí ni en T010). Con el driver `pysqlite`, SQLAlchemy no emite `BEGIN` ni `SAVEPOINT` de forma fiable sin configuración adicional de eventos, y no hace falta: en SQLite una sentencia que viola una restricción se revierte sola y no invalida la transacción en curso (a diferencia de PostgreSQL), así que la prueba puede seguir usando la conexión después del `IntegrityError`
+- [X] T020 [P] [US2] Prueba en `tests/unit/test_catalog_service.py`:
   - `add_variant` guarda `value_key`.
   - Peso «500 G » repetido en el mismo producto → `DuplicateVariantError`.
   - Color «Negro» y marca «Negro» en el mismo producto se permiten.
@@ -181,7 +181,7 @@ comprobar el precio efectivo en el detalle y en `list_quotable_items`.
     - «Café» con variantes activas da solo sus variantes, con etiqueta `"Café — Peso: 500 g"` y su precio efectivo.
     - Una variante inactiva no aparece, y un producto inactivo no aparece ni él ni sus variantes (estados fijados directamente en la sesión).
     - El orden es por etiqueta.
-- [ ] T021 [P] [US2] Ampliar `tests/integration/test_catalog_pages.py`:
+- [X] T021 [P] [US2] Ampliar `tests/integration/test_catalog_pages.py`:
   - `POST /productos/{id}/variantes` válido → 303 a `/productos/{id}`, y el detalle muestra «Peso: 250 g — $ 18.000» (sin precio propio) y «Peso: 500 g — $ 32.000».
   - Una variante repetida → 409 con «Ese producto ya tiene una variante activa con ese tipo y valor».
   - `kind=talla` → 422 con «Elige un tipo de variante válido».
@@ -192,7 +192,7 @@ comprobar el precio efectivo en el detalle y en `list_quotable_items`.
 
 ### Implementación de la Historia 2
 
-- [ ] T022 [US2] Implementar en `app/models/catalog.py`:
+- [X] T022 [US2] Implementar en `app/models/catalog.py`:
   - `VariantKind(StrEnum)` con los valores `sabor`, `peso`, `color`, `marca` y `tamano`, y la propiedad `label` («Sabor», «Peso», «Color», «Marca», «Tamaño»).
   - `ProductVariant(SQLModel, table=True)`, tabla `product_variant`:
     - `product_id`: FK a `product.id` con `ondelete="RESTRICT"` e `index=True`.
@@ -204,10 +204,10 @@ comprobar el precio efectivo en el detalle y en `list_quotable_items`.
   - Relación `Product.variants` ↔ `ProductVariant.product`.
   - `VariantInput`.
   - `QuotableItem` (`product_id`, `variant_id: int | None`, `label`, `unit_price: int`).
-- [ ] T023 [US2] Generar la migración `uv run alembic revision --autogenerate -m "crear tabla de variantes"` y revisarla: CHECK con nombre, índice parcial y `downgrade`
-- [ ] T024 [US2] Ampliar `app/repositories/catalog.py` con `find_active_variant(session, product_id, kind, value_key, exclude_id: int | None)` y `list_active_products_with_variants(session)` (carga las variantes con `selectinload` para evitar N+1)
-- [ ] T025 [US2] Implementar en `app/services/catalog.py` `DuplicateVariantError`, `add_variant`, `effective_price` y `list_quotable_items` (R10), traduciendo `IntegrityError` como en T016
-- [ ] T026 [US2] Agregar a `app/routers/catalog.py` la ruta `POST /productos/{product_id}/variantes` (si hay errores, 422 o 409 renderizando `detail.html` con el formulario de variante y sus mensajes) y, en `detail.html`, la lista de variantes con su precio efectivo (calculado en el router con `effective_price`, nunca en la plantilla) y el formulario para agregar una
+- [X] T023 [US2] Generar la migración `uv run alembic revision --autogenerate -m "crear tabla de variantes"` y revisarla: CHECK con nombre, índice parcial y `downgrade`
+- [X] T024 [US2] Ampliar `app/repositories/catalog.py` con `find_active_variant(session, product_id, kind, value_key, exclude_id: int | None)` y `list_active_products_with_variants(session)` (carga las variantes con `selectinload` para evitar N+1)
+- [X] T025 [US2] Implementar en `app/services/catalog.py` `DuplicateVariantError`, `add_variant`, `effective_price` y `list_quotable_items` (R10), traduciendo `IntegrityError` como en T016
+- [X] T026 [US2] Agregar a `app/routers/catalog.py` la ruta `POST /productos/{product_id}/variantes` (si hay errores, 422 o 409 renderizando `detail.html` con el formulario de variante y sus mensajes) y, en `detail.html`, la lista de variantes con su precio efectivo (calculado en el router con `effective_price`, nunca en la plantilla) y el formulario para agregar una
 
 **Punto de control**: US1 y US2 funcionan por separado; `list_quotable_items` lista la fuente de
 precios.

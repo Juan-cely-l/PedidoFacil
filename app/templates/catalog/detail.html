@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "catalog/_fields.html" as fields with context %}
 {% block title %}{{ product.name }} · PedidoFácil{% endblock %}
 {% block content %}
 <article>
@@ -9,5 +10,46 @@
   <p>Precio: <strong>{{ product.price | cop }}</strong></p>
   <p>Controla inventario: {{ "sí" if product.tracks_inventory else "no" }}</p>
 </article>
+
+<section>
+  <h2>Variantes</h2>
+  {% if variant_rows %}
+  <ul>
+    {% for variant, price in variant_rows %}
+    <li>{{ variant.label }} — {{ price | cop }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Sin variantes: se cotiza con el precio del producto.</p>
+  {% endif %}
+
+  <form method="post" action="/productos/{{ product.id }}/variantes" novalidate>
+    <fieldset>
+      <legend>Agregar variante</legend>
+      <label>
+        Tipo
+        <select name="kind" required{{ fields.invalid("kind") }}>
+          <option value=""{% if not form.kind %} selected{% endif %} disabled>Elige un tipo</option>
+          {% for kind in variant_kinds %}
+          <option value="{{ kind.value }}"{% if form.kind == kind.value %} selected{% endif %}>{{ kind.label }}</option>
+          {% endfor %}
+        </select>
+        {{ fields.error("kind") }}
+      </label>
+      <label>
+        Valor
+        <input name="value" value="{{ form.value }}" maxlength="50" placeholder="500 g, Chocolate, Rojo…" required{{ fields.invalid("value") }}>
+        {{ fields.error("value") }}
+      </label>
+      <label>
+        Precio propio (opcional)
+        <input name="price" value="{{ form.price }}" inputmode="numeric" placeholder="Vacío = {{ product.price | cop }}"{{ fields.invalid("price") }}>
+        {{ fields.error("price") }}
+      </label>
+    </fieldset>
+    <button type="submit">Agregar variante</button>
+  </form>
+</section>
+
 <p><a href="/productos">Volver a productos</a></p>
 {% endblock %}

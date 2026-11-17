@@ -8,11 +8,16 @@ from app.models.catalog import (
     PRICE_GROUPING_MESSAGE,
     PRICE_INVALID_MESSAGE,
     PRICE_TOO_HIGH_MESSAGE,
+    Product,
     ProductInput,
+    ProductVariant,
+    VariantInput,
+    VariantKind,
     clean_text,
     normalize_key,
     parse_price,
 )
+from app.services.catalog import effective_price
 
 # Precio en pesos (T004)
 
@@ -169,3 +174,101 @@ def test_product_input_precio_mal_agrupado_usa_el_mensaje_de_miles() -> None:
         ProductInput.model_validate({"name": "Brownie", "price": "45.00"})
 
     assert _errors_by_field(error.value) == {"price": PRICE_GROUPING_MESSAGE}
+
+
+# Datos del formulario de variante y precio efectivo (T018)
+
+
+@pytest.mark.parametrize("kind", ["sabor", "peso", "color", "marca", "tamano"])
+def test_variant_input_acepta_los_cinco_tipos(kind: str) -> None:
+    data = VariantInput.model_validate({"kind": kind, "value": "Chocolate", "price": ""})
+
+    assert data.kind == VariantKind(kind)
+
+
+@pytest.mark.parametrize("kind", ["talla", "", "Sabor"])
+def test_variant_input_tipo_desconocido_se_rechaza(kind: str) -> None:
+    with pytest.raises(ValidationError) as error:
+        VariantInput.model_validate({"kind": kind, "value": "Chocolate", "price": ""})
+
+    assert _errors_by_field(error.value) == {"kind": "Elige un tipo de variante válido"}
+
+
+def test_variant_input_limpia_el_valor() -> None:
+    data = VariantInput.model_validate({"kind": "peso", "value": "  500   g ", "price": ""})
+
+    assert data.value == "500 g"
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_variant_input_valor_vacio_es_obligatorio(value: str) -> None:
+    with pytest.raises(ValidationError) as error:
+        VariantInput.model_validate({"kind": "peso", "value": value, "price": ""})
+
+    assert _errors_by_field(error.value) == {"value": "El valor de la variante es obligatorio"}
+
+
+def test_variant_input_acepta_valor_de_50_y_rechaza_51_caracteres() -> None:
+    data = VariantInput.model_validate({"kind": "sabor", "value": "v" * 50, "price": ""})
+    assert len(data.value) == 50
+
+    with pytest.raises(ValidationError) as error:
+        VariantInput.model_validate({"kind": "sabor", "value": "v" * 51, "price": ""})
+
+    assert _errors_by_field(error.value) == {"value": "El valor admite máximo 50 caracteres"}
+
+
+@pytest.mark.parametrize("price", ["", "   "])
+def test_variant_input_sin_precio_usa_el_del_producto(price: str) -> None:
+    data = VariantInput.model_validate({"kind": "peso", "value": "250 g", "price": price})
+
+    assert data.price is None
+
+
+def test_variant_input_convierte_el_precio_propio() -> None:
+    data = VariantInput.model_validate({"kind": "peso", "value": "500 g", "price": "32.000"})
+
+    assert data.price == 32000
+
+
+@pytest.mark.parametrize(
+    ("price", "message"),
+    [("45,5", PRICE_INVALID_MESSAGE), ("45.00", PRICE_GROUPING_MESSAGE)],
+)
+def test_variant_input_precio_invalido_usa_los_mensajes_del_producto(
+    price: str, message: str
+) -> None:
+    with pytest.raises(ValidationError) as error:
+        VariantInput.model_validate({"kind": "peso", "value": "500 g", "price": price})
+
+    assert _errors_by_field(error.value) == {"price": message}
+
+
+@pytest.mark.parametrize(
+    ("kind", "label"),
+    [
+        (VariantKind.SABOR, "Sabor"),
+        (VariantKind.PESO, "Peso"),
+        (VariantKind.COLOR, "Color"),
+        (VariantKind.MARCA, "Marca"),
+        (VariantKind.TAMANO, "Tamaño"),
+    ],
+)
+def test_variant_kind_tiene_etiqueta_en_espanol(kind: VariantKind, label: str) -> None:
+    assert kind.label == label
+
+
+def _coffee(price: int = 18000) -> Product:
+    return Product(id=1, name="Café", name_key="cafe", price=price)
+
+
+def _variant(price: int | None) -> ProductVariant:
+    return ProductVariant(product_id=1, kind="peso", value="500 g", value_key="500 g", price=price)
+
+
+def test_precio_efectivo_sin_precio_propio_es_el_del_producto() -> None:
+    assert effective_price(_coffee(18000), _variant(None)) == 18000
+
+
+def test_precio_efectivo_con_precio_propio_es_el_de_la_variante() -> None:
+    assert effective_price(_coffee(18000), _variant(32000)) == 32000
