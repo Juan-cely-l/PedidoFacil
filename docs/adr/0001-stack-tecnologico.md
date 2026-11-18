@@ -83,6 +83,8 @@ Se adopta el siguiente stack, que la constitución (principio IV) fija como obli
 - **Pydantic AI con Gemini** para extraer pedidos de los mensajes; en pruebas, `TestModel`
   o `FunctionModel` con `ALLOW_MODEL_REQUESTS=False`.
 - **SessionMiddleware de Starlette + `pwdlib[argon2]`** para el login del dueño.
+  *Reemplazado por el [ADR 0003](0003-autenticacion-con-proveedor-externo.md) (2026-11-18):
+  Google OAuth 2.0 (OpenID Connect) con `authlib` y lista blanca `OWNER_EMAILS`.*
 - **Render con runtime nativo de Python y uv** para el despliegue.
 
 ## Consecuencias
