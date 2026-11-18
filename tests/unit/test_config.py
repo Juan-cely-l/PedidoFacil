@@ -352,13 +352,13 @@ def test_owner_emails_se_normalizan_y_descartan_los_vacios(
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.owner_emails == frozenset({"dueno@gmail.com", "otro@x.co"})  # type: ignore[attr-defined]
+    assert settings.owner_emails == frozenset({"dueno@gmail.com", "otro@x.co"})
 
 
 def test_sin_owner_emails_la_lista_queda_vacia_fuera_de_produccion() -> None:
     settings = Settings(_env_file=None, environment="local")
 
-    assert settings.owner_emails == frozenset()  # type: ignore[attr-defined]
+    assert settings.owner_emails == frozenset()
 
 
 @pytest.mark.parametrize(
@@ -370,7 +370,7 @@ def test_public_base_url_por_defecto_segun_el_ambiente(
 ) -> None:
     settings = Settings(_env_file=None, environment=environment)
 
-    assert settings.public_base_url == expected  # type: ignore[attr-defined]
+    assert settings.public_base_url == expected
 
 
 def test_public_base_url_explicita_se_respeta(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -378,7 +378,7 @@ def test_public_base_url_explicita_se_respeta(monkeypatch: pytest.MonkeyPatch) -
 
     settings = Settings(_env_file=None, environment="local")
 
-    assert settings.public_base_url == "http://localhost:8000"  # type: ignore[attr-defined]
+    assert settings.public_base_url == "http://localhost:8000"
 
 
 def test_produccion_sin_public_base_url_usa_la_url_que_define_render(
@@ -388,7 +388,7 @@ def test_produccion_sin_public_base_url_usa_la_url_que_define_render(
 
     settings = Settings(_env_file=None)
 
-    assert settings.public_base_url == PRODUCTION_BASE_URL  # type: ignore[attr-defined]
+    assert settings.public_base_url == PRODUCTION_BASE_URL
 
 
 def test_public_base_url_gana_a_la_url_de_render(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -396,7 +396,7 @@ def test_public_base_url_gana_a_la_url_de_render(monkeypatch: pytest.MonkeyPatch
 
     settings = Settings(_env_file=None)
 
-    assert settings.public_base_url == PRODUCTION_BASE_URL  # type: ignore[attr-defined]
+    assert settings.public_base_url == PRODUCTION_BASE_URL
 
 
 @pytest.mark.parametrize(
@@ -432,8 +432,8 @@ def test_produccion_con_el_login_completo_arranca(monkeypatch: pytest.MonkeyPatc
 
     settings = Settings(_env_file=None)
 
-    assert settings.google_client_id == VALID_GOOGLE_CLIENT_ID  # type: ignore[attr-defined]
-    assert settings.owner_emails == frozenset({"dueno@example.com"})  # type: ignore[attr-defined]
+    assert settings.google_client_id == VALID_GOOGLE_CLIENT_ID
+    assert settings.owner_emails == frozenset({"dueno@example.com"})
 
 
 def test_el_error_no_muestra_el_secreto_de_google(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -452,7 +452,7 @@ def test_la_representacion_de_settings_oculta_el_secreto_de_google(
     _set_production_env(monkeypatch, GOOGLE_CLIENT_SECRET=GOOGLE_SECRET_SENTINEL)
 
     settings = Settings(_env_file=None)
-    secret = settings.google_client_secret  # type: ignore[attr-defined]
+    secret = settings.google_client_secret
 
     # Primero el tipo: si el campo se declarara como str, repr() lo mostraría tal cual.
     assert isinstance(secret, SecretStr)
@@ -463,12 +463,11 @@ def test_la_representacion_de_settings_oculta_el_secreto_de_google(
 def test_la_uri_de_vuelta_de_google_sale_de_public_base_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _set_production_env(monkeypatch)
-
-    production = Settings(_env_file=None)
     local = Settings(_env_file=None, environment="test")
+    _set_production_env(monkeypatch)
+    production = Settings(_env_file=None)
 
-    assert production.oauth_redirect_uri == (  # type: ignore[attr-defined]
+    assert production.oauth_redirect_uri == (
         "https://pedidofacil-6nky.onrender.com/auth/google/callback"
     )
-    assert local.oauth_redirect_uri == "http://testserver/auth/google/callback"  # type: ignore[attr-defined]
+    assert local.oauth_redirect_uri == "http://testserver/auth/google/callback"

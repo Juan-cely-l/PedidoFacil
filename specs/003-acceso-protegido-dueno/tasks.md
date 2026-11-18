@@ -58,7 +58,7 @@ description: "Tareas de PED-15 · HU-07 Acceso protegido del dueño"
 
 **Propósito**: dependencias justificadas en research.md R12; no cambia el comportamiento.
 
-- [ ] T001 Agregar dependencias con `uv add authlib itsdangerous` y `uv add --dev time-machine` (actualiza `pyproject.toml` y `uv.lock`). Verificar `uv run pytest` en verde y hacer commit `chore(PED-15): agregar authlib, itsdangerous y time-machine`
+- [X] T001 Agregar dependencias con `uv add authlib itsdangerous` y `uv add --dev time-machine` (actualiza `pyproject.toml` y `uv.lock`). Verificar `uv run pytest` en verde y hacer commit `chore(PED-15): agregar authlib, itsdangerous y time-machine`
 
 ---
 
@@ -69,15 +69,15 @@ que usan todas las historias.
 
 ### Pruebas de los fundamentos (rojo) ⚠️
 
-- [ ] T002 [P] Prueba en `tests/unit/test_config.py` (ampliar), según contracts/configuration.md:
+- [X] T002 [P] Prueba en `tests/unit/test_config.py` (ampliar), según contracts/configuration.md:
   - **Lista blanca**: `OWNER_EMAILS=" Dueno@Gmail.com , otro@x.co ,,"` da `owner_emails == frozenset({"dueno@gmail.com", "otro@x.co"})`.
   - **`PUBLIC_BASE_URL` por defecto**: vale `"http://127.0.0.1:8000"` en `local` y `"http://testserver"` en `test`.
   - **Fallback de Render**: sin `PUBLIC_BASE_URL` y con `RENDER_EXTERNAL_URL="https://pedidofacil-6nky.onrender.com"` en producción, `public_base_url` toma ese valor.
   - **Validación de producción**: el error nombra `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_EMAILS` (si falta o queda vacía tras normalizar) y `PUBLIC_BASE_URL` (si falta o no empieza por `https://`).
   - **Privacidad**: `str(error)` no contiene el valor de `GOOGLE_CLIENT_SECRET` (usar `"secreto-centinela"`).
   - **Redirección**: la propiedad `oauth_redirect_uri` da `f"{public_base_url}/auth/google/callback"`.
-- [ ] T003 [P] Prueba en `tests/unit/test_auth_service.py` (nuevo) para `normalize_email`: `"  Dueno@Gmail.COM "` → `"dueno@gmail.com"`; `""` → `""`.
-- [ ] T004 Ampliar las fixtures y la prueba del ejemplo de configuración:
+- [X] T003 [P] Prueba en `tests/unit/test_auth_service.py` (nuevo) para `normalize_email`: `"  Dueno@Gmail.COM "` → `"dueno@gmail.com"`; `""` → `""`.
+- [X] T004 Ampliar las fixtures y la prueba del ejemplo de configuración:
   - **`test_settings`** (en `tests/conftest.py`): agregarle `google_client_id="test-client-id"`, `google_client_secret="test-client-secret"`, `owner_emails="dueno@example.com"` y `secret_key="s" * 32` (fija, para poder decodificar la sesión).
   - **`production_settings`** (en `tests/conftest.py`): agregarle con `monkeypatch.setenv` `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_EMAILS=dueno@example.com` y `PUBLIC_BASE_URL=https://pedidofacil-6nky.onrender.com`.
   - **`tests/unit/test_env_example.py`**: agregar `"GOOGLE_CLIENT_SECRET"` a `MUST_BE_COMMENTED` y `"RENDER_EXTERNAL_URL"` a `PLATFORM_VARIABLES`.
@@ -88,8 +88,8 @@ aprobación del autor. Luego, commit `test(PED-15): configuración del login y n
 
 ### Implementación de los fundamentos (verde)
 
-- [ ] T005 Implementar `normalize_email(email: str) -> str` (`strip()` + `casefold()`) en `app/services/auth.py`, un módulo puro que no importa `app.config`.
-- [ ] T006 Implementar en `app/config.py`:
+- [X] T005 Implementar `normalize_email(email: str) -> str` (`strip()` + `casefold()`) en `app/services/auth.py`, un módulo puro que no importa `app.config`.
+- [X] T006 Implementar en `app/config.py`:
   - **Campos nuevos**:
     - `google_client_id: str | None`;
     - `google_client_secret: SecretStr | None`;

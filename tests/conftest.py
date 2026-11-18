@@ -61,9 +61,9 @@ def test_settings() -> Settings:
         _env_file=None,
         environment="test",
         secret_key=SecretStr("s" * 32),
-        google_client_id="test-client-id",  # type: ignore[call-arg]
+        google_client_id="test-client-id",
         google_client_secret=SecretStr("test-client-secret"),
-        owner_emails="dueno@example.com",
+        owner_emails=frozenset({"dueno@example.com"}),
     )
 
 
