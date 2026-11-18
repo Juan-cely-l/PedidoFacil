@@ -48,3 +48,8 @@ def start_session(session: dict[str, Any], identity: "VerifiedIdentity", now: fl
         "name": identity.name,
         "login_at": now,
     }
+
+
+def is_authorized(identity: "VerifiedIdentity", owner_emails: frozenset[str]) -> bool:
+    """El correo está verificado por Google y en la lista blanca (normalizada)."""
+    raise NotImplementedError

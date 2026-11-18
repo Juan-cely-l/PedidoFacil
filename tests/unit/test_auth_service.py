@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from app.services.auth import normalize_email, safe_next_path, start_session
+from app.services.auth import is_authorized, normalize_email, safe_next_path, start_session
 from app.services.identity import VerifiedIdentity
 
 # Normalización de correos para la lista blanca (T003)
@@ -80,3 +80,32 @@ def test_start_session_limpia_la_sesion_y_guarda_solo_al_duenio() -> None:
     assert session == {
         "owner": {"email": "dueno@example.com", "name": "Dueño", "login_at": 1_795_000_000.0}
     }
+
+
+# Lista blanca: solo correos verificados que estén en OWNER_EMAILS (T017, research.md R6)
+
+OWNER_EMAILS = frozenset({"dueno@example.com"})
+
+
+def test_un_correo_verificado_de_la_lista_esta_autorizado_sin_importar_mayusculas() -> None:
+    identity = VerifiedIdentity(email="Dueno@Example.com ", email_verified=True, name="Dueño")
+
+    assert is_authorized(identity, OWNER_EMAILS) is True
+
+
+def test_un_correo_fuera_de_la_lista_no_esta_autorizado() -> None:
+    identity = VerifiedIdentity(email="intruso@gmail.com", email_verified=True, name="Intruso")
+
+    assert is_authorized(identity, OWNER_EMAILS) is False
+
+
+def test_un_correo_no_verificado_no_esta_autorizado_aunque_este_en_la_lista() -> None:
+    identity = VerifiedIdentity(email="dueno@example.com", email_verified=False, name="Dueño")
+
+    assert is_authorized(identity, OWNER_EMAILS) is False
+
+
+def test_con_la_lista_vacia_nadie_esta_autorizado() -> None:
+    identity = VerifiedIdentity(email="dueno@example.com", email_verified=True, name="Dueño")
+
+    assert is_authorized(identity, frozenset()) is False

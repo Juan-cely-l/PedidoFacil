@@ -194,7 +194,7 @@ comprobar el mensaje y que no hay sesión.
   - `True` para `"Dueno@Example.com "` verificado si la lista tiene `"dueno@example.com"`;
   - `False` si el correo no está;
   - `False` si `email_verified=False` aunque esté en la lista.
-- [ ] T018 [P] [US2] Ampliar `tests/integration/test_login_flow.py`. Los casos, con el aviso al que redirige el callback, el mensaje exacto en `GET /login?aviso=…` (contracts/auth-routes.md) y sin sesión (`GET /productos` sin 200 y la sesión decodificada sin `owner`):
+- [ ] T018 [P] [US2] Ampliar `tests/integration/test_login_flow.py`. Los casos, con el aviso al que redirige el callback, el mensaje exacto en `GET /login?aviso=…` (contracts/auth-routes.md) y la sesión decodificada **vacía** tras el rechazo (sin dueño, sin destino pendiente y sin el estado temporal del login). La aserción de que `GET /productos` no responde 200 tras un rechazo se movió a T025 (US3): en US2 era imposible, porque `/productos` todavía no exige sesión.
 
   | Caso | Aviso | Mensaje |
   |---|---|---|
@@ -239,6 +239,8 @@ T017–T019 fallan por la razón esperada y esperar la aprobación del autor. Lu
   - sin `userinfo` → `sin_id_token`.
 
   El log solo registra `type(error).__name__` y el motivo.
+
+  **Regla para las pruebas**: las aserciones de la fase verde van sobre el motivo traducido (`LoginFailed.reason`, por ejemplo `id_token_invalido`), nunca sobre la clase de excepción de joserfc o authlib. Esas clases son detalles internos de la versión 1.9. Por ejemplo, con un `aud` distinto authlib lanza `MissingClaimError` por el claim `azp`, no un error sobre `aud`. Acoplar las pruebas a ellas las rompería en cualquier actualización.
 - [ ] T023 [US2] Implementar en `app/routers/auth.py` y `app/templates/auth/login.html`:
   - **Callback**: si `LoginFailed` o `not is_authorized(identity, settings.owner_emails)`, hace `request.session.clear()` y responde 303 a `/login?aviso=<código>`.
   - **Plantilla**: traduce solo los códigos conocidos (`no_autorizado`, `cancelado`, `error`, `salida`) con un diccionario fijo.
@@ -264,6 +266,7 @@ queda abierta. La lista blanca se revisa en cada petición.
   - **Rutas públicas**: cada una responde sin `Location` hacia `/login`.
   - **Lista pública**: `app.security.PUBLIC_PATHS == EXPECTED_PUBLIC`.
 - [ ] T025 [P] [US3] Ampliar `tests/integration/test_login_flow.py`:
+  - **Tras un rechazo** (movido desde T018): con el proveedor falso devolviendo `intruso@gmail.com`, después del callback `GET /productos` responde 303 al login, no 200.
   - Sin sesión, `GET /productos` → 303 a `/login?next=%2Fproductos` (o `next=/productos`, según cómo se codifique), y `GET /productos/3` → `next` con ese path.
   - Sin sesión, `POST /productos` con datos válidos → 303 a `/login` sin `next`; luego, con sesión, `/productos` no muestra ese producto (no se guardó).
   - Sin sesión, `/health` y `/health/live` responden como hoy (200).
