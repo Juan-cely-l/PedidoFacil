@@ -22,7 +22,7 @@ La constitución (`.specify/memory/constitution.md`) prevalece sobre este archiv
 - Telegram: Bot API con httpx y webhook en `app/routers/telegram.py`; en pruebas, `httpx.MockTransport`.
 - Envío desde la web: enlaces `wa.me` y `t.me/share`, sin API de WhatsApp.
 - Montos: enteros en pesos (nunca float); descuento de inventario dentro de una transacción.
-- Login: SessionMiddleware de Starlette + `pwdlib[argon2]`; un solo usuario (el dueño).
+- Login: Google OAuth 2.0 con authlib sobre SessionMiddleware; sin contraseñas. Solo entran los correos de OWNER_EMAILS. En pruebas se sustituye el cliente OAuth y nunca se llama a Google.
 - Pruebas: `tests/unit` (servicios, sin HTTP) y `tests/integration` (endpoints con `TestClient`); fechas congeladas con `time-machine`.
 
 ## Commits (automáticos, siguiendo TDD)
