@@ -292,7 +292,10 @@ web) → URIs de redireccionamiento autorizados**:
 - **`httpx2` en `app/`**: solo en `app/services/identity.py`, para tipar el transporte que se le
   pasa a authlib. Ningún otro módulo de la app la importa.
 
-**Riesgo**: ni `httpx` ni `httpx2` están declaradas directamente; ambas dependen de que
-`fastapi[standard]` las siga trayendo. Si una actualización de FastAPI dejara de traer `httpx2`,
-authlib pasaría a `httpx` con un aviso y las pruebas de T011 fallarían al importar `httpx2`. La
-CI lo detectaría, y en ese caso se declararía `httpx2` con `uv add`.
+**Dependencias declaradas** (actualizado el 2026-11-18):
+
+- **`httpx2`** se declara directamente (`uv add httpx2`). La importa `app/services/identity.py`
+  y es la que usa authlib, así que el proyecto ya no depende de que `fastapi[standard]` la siga
+  trayendo.
+- **`httpx`** sigue llegando solo de forma transitiva; se declarará con `uv add httpx` cuando
+  llegue la integración con Telegram, el primer código propio que la importe.
