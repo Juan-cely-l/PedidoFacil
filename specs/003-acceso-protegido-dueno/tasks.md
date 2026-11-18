@@ -190,11 +190,11 @@ comprobar el mensaje y que no hay sesión.
 
 ### Pruebas de la Historia 2 (rojo) ⚠️
 
-- [ ] T017 [P] [US2] Prueba en `tests/unit/test_auth_service.py` para `is_authorized(identity: VerifiedIdentity, owner_emails: frozenset[str]) -> bool`:
+- [X] T017 [P] [US2] Prueba en `tests/unit/test_auth_service.py` para `is_authorized(identity: VerifiedIdentity, owner_emails: frozenset[str]) -> bool`:
   - `True` para `"Dueno@Example.com "` verificado si la lista tiene `"dueno@example.com"`;
   - `False` si el correo no está;
   - `False` si `email_verified=False` aunque esté en la lista.
-- [ ] T018 [P] [US2] Ampliar `tests/integration/test_login_flow.py`. Los casos, con el aviso al que redirige el callback, el mensaje exacto en `GET /login?aviso=…` (contracts/auth-routes.md) y la sesión decodificada **vacía** tras el rechazo (sin dueño, sin destino pendiente y sin el estado temporal del login). La aserción de que `GET /productos` no responde 200 tras un rechazo se movió a T025 (US3): en US2 era imposible, porque `/productos` todavía no exige sesión.
+- [X] T018 [P] [US2] Ampliar `tests/integration/test_login_flow.py`. Los casos, con el aviso al que redirige el callback, el mensaje exacto en `GET /login?aviso=…` (contracts/auth-routes.md) y la sesión decodificada **vacía** tras el rechazo (sin dueño, sin destino pendiente y sin el estado temporal del login). La aserción de que `GET /productos` no responde 200 tras un rechazo se movió a T025 (US3): en US2 era imposible, porque `/productos` todavía no exige sesión.
 
   | Caso | Aviso | Mensaje |
   |---|---|---|
@@ -208,7 +208,7 @@ comprobar el mensaje y que no hay sesión.
   Además:
   - `GET /login?aviso=<script>` no refleja el texto y no muestra ningún aviso.
   - En los rechazos, ni `caplog` ni las respuestas contienen `intruso@gmail.com` ni `TOKEN-CENTINELA-`.
-- [ ] T019 [P] [US2] Ampliar `tests/unit/test_google_identity.py`. Cada caso debe lanzar `LoginFailed` con el motivo indicado:
+- [X] T019 [P] [US2] Ampliar `tests/unit/test_google_identity.py`. Cada caso debe lanzar `LoginFailed` con el motivo indicado:
 
   | Caso | Motivo |
   |---|---|
@@ -222,7 +222,7 @@ comprobar el mensaje y que no hay sesión.
   | El transporte lanza `httpx.ConnectError` | `red` |
 
   Además: en todos los casos, `caplog` no contiene `TOKEN-CENTINELA-` ni el `code` de la URL.
-- [ ] T020 [US2] Esqueleto de `is_authorized` con `NotImplementedError` en `app/services/auth.py`.
+- [X] T020 [US2] Esqueleto de `is_authorized` con `NotImplementedError` en `app/services/auth.py`.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 2.** Ejecutar `uv run pytest`, mostrar que
 T017–T019 fallan por la razón esperada y esperar la aprobación del autor. Luego, commit
@@ -230,8 +230,8 @@ T017–T019 fallan por la razón esperada y esperar la aprobación del autor. Lu
 
 ### Implementación de la Historia 2 (verde)
 
-- [ ] T021 [US2] Implementar `is_authorized` en `app/services/auth.py`.
-- [ ] T022 [US2] Implementar en `GoogleIdentityProvider.complete_login` (`app/services/identity.py`) la traducción de errores a `LoginFailed` (contracts/auth-routes.md):
+- [X] T021 [US2] Implementar `is_authorized` en `app/services/auth.py`.
+- [X] T022 [US2] Implementar en `GoogleIdentityProvider.complete_login` (`app/services/identity.py`) la traducción de errores a `LoginFailed` (contracts/auth-routes.md):
   - `OAuthError` con `error == "access_denied"` → `cancelado`;
   - `MismatchingStateError` → `state_invalido`;
   - errores de `joserfc.errors.*` (por ejemplo `InvalidClaimError` con un `nonce` distinto, `BadSignatureError` con otra clave) → `id_token_invalido`. authlib 1.9 valida el `id_token` con joserfc, no con `authlib.jose`;
@@ -241,7 +241,7 @@ T017–T019 fallan por la razón esperada y esperar la aprobación del autor. Lu
   El log solo registra `type(error).__name__` y el motivo.
 
   **Regla para las pruebas**: las aserciones de la fase verde van sobre el motivo traducido (`LoginFailed.reason`, por ejemplo `id_token_invalido`), nunca sobre la clase de excepción de joserfc o authlib. Esas clases son detalles internos de la versión 1.9. Por ejemplo, con un `aud` distinto authlib lanza `MissingClaimError` por el claim `azp`, no un error sobre `aud`. Acoplar las pruebas a ellas las rompería en cualquier actualización.
-- [ ] T023 [US2] Implementar en `app/routers/auth.py` y `app/templates/auth/login.html`:
+- [X] T023 [US2] Implementar en `app/routers/auth.py` y `app/templates/auth/login.html`:
   - **Callback**: si `LoginFailed` o `not is_authorized(identity, settings.owner_emails)`, hace `request.session.clear()` y responde 303 a `/login?aviso=<código>`.
   - **Plantilla**: traduce solo los códigos conocidos (`no_autorizado`, `cancelado`, `error`, `salida`) con un diccionario fijo.
   - **Logs**: registran «inicio de sesión aceptado» o «rechazado: <motivo>», sin el correo.

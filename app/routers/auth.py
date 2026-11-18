@@ -12,8 +12,13 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.config import Settings, get_app_settings
-from app.services.auth import DEFAULT_AFTER_LOGIN, safe_next_path, start_session
-from app.services.identity import IdentityProvider, get_identity_provider
+from app.services.auth import (
+    DEFAULT_AFTER_LOGIN,
+    is_authorized,
+    safe_next_path,
+    start_session,
+)
+from app.services.identity import IdentityProvider, LoginFailed, get_identity_provider
 from app.templating import templates
 
 logger = logging.getLogger("pedidofacil.auth")
@@ -25,7 +30,18 @@ Provider = Annotated[IdentityProvider, Depends(get_identity_provider)]
 NextPath = Annotated[str | None, Query(alias="next")]
 
 # Avisos de la página de login: solo códigos conocidos, nunca texto que venga en la URL (R11).
-NOTICES = {"error": "No se pudo iniciar sesión con Google. Intenta de nuevo"}
+NOTICES = {
+    "no_autorizado": "Esta cuenta de Google no tiene acceso a PedidoFácil",
+    "cancelado": "No se completó el inicio de sesión con Google",
+    "error": "No se pudo iniciar sesión con Google. Intenta de nuevo",
+}
+# Motivo del rechazo → aviso que ve el dueño (contracts/auth-routes.md); el resto, «error».
+_NOTICE_BY_REASON = {
+    "no_autorizado": "no_autorizado",
+    "no_verificado": "no_autorizado",
+    "cancelado": "cancelado",
+    "state_invalido": "cancelado",
+}
 
 
 def _redirect(url: str) -> RedirectResponse:
@@ -58,10 +74,25 @@ async def login_with_google(
 
 
 @router.get("/auth/google/callback")
-async def google_callback(request: Request, provider: Provider) -> Response:
+async def google_callback(request: Request, settings: AppSettings, provider: Provider) -> Response:
     """Vuelta desde Google: abre la sesión del dueño y lo lleva a donde quería ir."""
-    identity = await provider.complete_login(request)
+    try:
+        identity = await provider.complete_login(request)
+    except LoginFailed as failure:
+        return _reject(request, failure.reason)
+    if not is_authorized(identity, settings.owner_emails):
+        return _reject(request, "no_autorizado" if identity.email_verified else "no_verificado")
     destination = safe_next_path(request.session.get("login_next"))
     start_session(request.session, identity, time.time())
     logger.info("Inicio de sesión aceptado")
     return _redirect(destination or DEFAULT_AFTER_LOGIN)
+
+
+def _reject(request: Request, reason: str) -> RedirectResponse:
+    """Rechaza el login: vacía la sesión (también la anterior) y muestra un aviso fijo.
+
+    El log registra el motivo, nunca el correo (constitución VI).
+    """
+    request.session.clear()
+    logger.warning("Inicio de sesión rechazado: %s", reason)
+    return _redirect(f"/login?aviso={_NOTICE_BY_REASON.get(reason, 'error')}")

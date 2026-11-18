@@ -6,14 +6,20 @@ con authlib y es el único módulo que habla con Google. Las pruebas la sustituy
 (authlib usa httpx2, no httpx).
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
 import httpx2
 
 # authlib no publica tipos (sin py.typed): su uso queda aislado en este módulo.
+from authlib.integrations.base_client import (  # type: ignore[import-untyped]
+    MismatchingStateError,
+    OAuthError,
+)
 from authlib.integrations.starlette_client import OAuth  # type: ignore[import-untyped]
 from fastapi import Request
+from joserfc.errors import JoseError
 from starlette.responses import Response
 
 from app.config import Settings
@@ -21,6 +27,8 @@ from app.config import Settings
 GOOGLE_METADATA_URL = "https://accounts.google.com/.well-known/openid-configuration"
 # openid activa OpenID Connect: authlib genera y valida el nonce del id_token (research.md R7).
 GOOGLE_SCOPE = "openid email profile"
+
+logger = logging.getLogger("pedidofacil.auth")
 
 
 @dataclass(frozen=True)
@@ -79,14 +87,33 @@ class GoogleIdentityProvider:
 
     async def complete_login(self, request: Request) -> VerifiedIdentity:
         """Valida state, id_token (firma, emisor, destinatario, expiración) y nonce."""
-        token = await self._client.authorize_access_token(request)
-        userinfo = token["userinfo"]
+        try:
+            token = await self._client.authorize_access_token(request)
+        except MismatchingStateError as error:  # antes que OAuthError: es una subclase
+            raise _login_failed("state_invalido", error) from None
+        except OAuthError as error:
+            reason = "cancelado" if error.error == "access_denied" else "error_proveedor"
+            raise _login_failed(reason, error) from None
+        except JoseError as error:  # firma, emisor, destinatario, expiración o nonce
+            raise _login_failed("id_token_invalido", error) from None
+        except httpx2.HTTPError as error:
+            raise _login_failed("red", error) from None
+        # Sin id_token, authlib no valida firma ni nonce y no devuelve userinfo (R7).
+        userinfo = token.get("userinfo")
+        if not userinfo:
+            raise LoginFailed("sin_id_token")
         email = str(userinfo.get("email") or "")
         return VerifiedIdentity(
             email=email,
             email_verified=userinfo.get("email_verified") is True,
             name=str(userinfo.get("name") or email),
         )
+
+
+def _login_failed(reason: str, error: Exception) -> LoginFailed:
+    """Registra solo el motivo y el tipo de error: su mensaje puede traer el código o tokens."""
+    logger.warning("Login con Google fallido: %s (%s)", reason, type(error).__name__)
+    return LoginFailed(reason)
 
 
 def get_identity_provider(request: Request) -> IdentityProvider:
