@@ -115,13 +115,13 @@ abrir el catálogo.
 
 ### Pruebas de la Historia 1 (rojo) ⚠️
 
-- [ ] T007 [P] [US1] Prueba en `tests/unit/test_auth_service.py` para `safe_next_path(raw: str | None) -> str | None` (research.md R4), con dos pruebas parametrizadas (`@pytest.mark.parametrize`). Los valores se escriben en Python como literales crudos (`r"..."`) donde haya barras invertidas:
+- [X] T007 [P] [US1] Prueba en `tests/unit/test_auth_service.py` para `safe_next_path(raw: str | None) -> str | None` (research.md R4), con dos pruebas parametrizadas (`@pytest.mark.parametrize`). Los valores se escriben en Python como literales crudos (`r"..."`) donde haya barras invertidas:
   - **Se aceptan y devuelven igual**: `"/productos/7"`, `"/productos?x=1"`, `"/productos"` y `"/productos?inactivos=1"`.
   - **Se rechazan (dan `None`)**:
     - los cinco casos pedidos por el autor: `"https://evil.com"`, `"//evil.com"`, `r"/\evil.com"`, `r"\\evil.com"` y `r"https:/\evil.com"`;
     - además: `None`, `""`, `"productos"`, `"//evil.com/productos"`, `r"/productos\x"`, `"http:/evil.com"`, `"javascript:alert(1)"`, `"/login"`, `"/login/google"`, `"/auth/google/callback"`, `"/logout"`, `"/productos\n"` y `"/productos\t"`.
-- [ ] T008 [P] [US1] Prueba en `tests/unit/test_auth_service.py` para `start_session(session: dict[str, Any], identity: VerifiedIdentity, now: float) -> None`. Con una sesión que ya trae `{"basura": 1, "_state_google_x": {...}, "login_next": "/productos"}`, después de llamarla la sesión es exactamente `{"owner": {"email": "dueno@example.com", "name": "Dueño", "login_at": now}}`: se limpió antes de escribir (R5) y no trae tokens.
-- [ ] T009 [P] [US1] Prueba en `tests/integration/test_login_flow.py` (nuevo). Usa `create_app(test_settings)` + `FakeIdentityProvider` en `dependency_overrides` y un `TestClient` sin sesión:
+- [X] T008 [P] [US1] Prueba en `tests/unit/test_auth_service.py` para `start_session(session: dict[str, Any], identity: VerifiedIdentity, now: float) -> None`. Con una sesión que ya trae `{"basura": 1, "_state_google_x": {...}, "login_next": "/productos"}`, después de llamarla la sesión es exactamente `{"owner": {"email": "dueno@example.com", "name": "Dueño", "login_at": now}}`: se limpió antes de escribir (R5) y no trae tokens.
+- [X] T009 [P] [US1] Prueba en `tests/integration/test_login_flow.py` (nuevo). Usa `create_app(test_settings)` + `FakeIdentityProvider` en `dependency_overrides` y un `TestClient` sin sesión:
   - `GET /login` → 200 con un enlace o botón a `/login/google` con el texto «Entrar con Google» y sin ningún `type="password"`.
   - `GET /login/google?next=/productos/7` → 302 hacia el proveedor (el falso apunta al callback); al seguir al callback con la identidad `dueno@example.com` verificada → 303 con `Location: /productos/7`.
   - Sin `next` → el callback redirige a `/productos`.
@@ -132,16 +132,16 @@ abrir el catálogo.
   - **Login sin configurar en local (G1, contracts/configuration.md)**:
     - **Montaje**: una app con `Settings(_env_file=None, environment="local", database_url="sqlite://")` y sin `GOOGLE_CLIENT_ID`. Se sustituye `get_identity_provider` por `ExplodingIdentityProvider`, que hace fallar la prueba si se le llama: así se prueba que no se intenta contactar a Google (cambio 3 de la fase roja, abajo).
     - **Resultado**: `GET /login/google` → 303 a `/login?aviso=error`. Al seguirla, la página muestra «No se pudo iniciar sesión con Google. Intenta de nuevo» y no queda sesión con `owner`.
-- [ ] T010 [P] [US1] Prueba en `tests/integration/test_session_cookie.py` (nuevo). Tras un login con el proveedor falso, la cabecera `Set-Cookie` de `pedidofacil_session` contiene:
+- [X] T010 [P] [US1] Prueba en `tests/integration/test_session_cookie.py` (nuevo). Tras un login con el proveedor falso, la cabecera `Set-Cookie` de `pedidofacil_session` contiene:
   - `HttpOnly`, `SameSite=lax`, `Max-Age=43200` y `Path=/`;
   - **sin `Secure`** en `test`;
   - **con `Secure`** en la app de producción: `create_app(production_settings)` con `get_session` y `get_identity_provider` sustituidos.
-- [ ] T011 [P] [US1] Prueba en `tests/unit/test_google_identity.py` (nuevo), con authlib real contra `httpx2.MockTransport` (research.md R7 y R14):
+- [X] T011 [P] [US1] Prueba en `tests/unit/test_google_identity.py` (nuevo), con authlib real contra `httpx2.MockTransport` (research.md R7 y R14):
   - **Google simulado**: el transporte responde `/.well-known/openid-configuration` (issuer `https://accounts.google.com`, endpoints falsos), el JWKS con una clave RSA generada en la prueba (`joserfc.jwk.RSAKey.generate_key(2048, parameters={"kid": ...})`) y el endpoint de token con un `id_token` firmado (`iss`, `aud=test-client-id`, `exp`, `iat`, `email`, `email_verified=True`, `name`, `nonce` igual al guardado) más `access_token="TOKEN-CENTINELA-ACCESO"`.
   - **Ida**: `start_login(request, redirect_uri)` responde 302 hacia el endpoint de autorización con `state` y `nonce` en la URL, y los guarda en la sesión.
   - **Vuelta**: `complete_login` con ese `state` devuelve `VerifiedIdentity(email="dueno@example.com", email_verified=True, name="Dueño")`.
   - **Si authlib no deja inyectar el transporte** (`client_kwargs={"transport": ...}` en `OAuth.register`): detenerse y avisar al autor en esta misma fase roja, sin buscar otro mecanismo por cuenta propia.
-- [ ] T012 [US1] Agregar a `tests/doubles.py` el `FakeIdentityProvider` tipado (ver convenciones) y, en `tests/conftest.py`, las fixtures `identity_provider`, `auth_app` y `anonymous_client`; en `tests/doubles.py`, `log_in(client, next_path)`, `read_session` y `ExplodingIdentityProvider` (ver los cambios aplicados abajo). Agregar los esqueletos con `NotImplementedError`:
+- [X] T012 [US1] Agregar a `tests/doubles.py` el `FakeIdentityProvider` tipado (ver convenciones) y, en `tests/conftest.py`, las fixtures `identity_provider`, `auth_app` y `anonymous_client`; en `tests/doubles.py`, `log_in(client, next_path)`, `read_session` y `ExplodingIdentityProvider` (ver los cambios aplicados abajo). Agregar los esqueletos con `NotImplementedError`:
   - en `app/services/identity.py`: `VerifiedIdentity`, `LoginFailed`, `IdentityProvider`, `GoogleIdentityProvider`, `get_identity_provider`;
   - en `app/services/auth.py`: `safe_next_path`, `start_session`.
 
@@ -159,17 +159,17 @@ Luego, commit `test(PED-15): entrar con la cuenta de Google`.
 
 ### Implementación de la Historia 1 (verde)
 
-- [ ] T013 [US1] Implementar `safe_next_path` y `start_session` en `app/services/auth.py` según research.md R4 y R5.
-- [ ] T014 [US1] Implementar en `app/services/identity.py`:
+- [X] T013 [US1] Implementar `safe_next_path` y `start_session` en `app/services/auth.py` según research.md R4 y R5.
+- [X] T014 [US1] Implementar en `app/services/identity.py`:
   - `VerifiedIdentity` (frozen: `email: str`, `email_verified: bool`, `name: str`).
   - `LoginFailed(reason: str)`.
   - El protocolo `IdentityProvider`.
   - `GoogleIdentityProvider(settings, transport: httpx.AsyncBaseTransport | None = None)`: registra en authlib `google` con `server_metadata_url`, `client_id`, `client_secret` y `client_kwargs={"scope": "openid email profile"}` más el transporte si se pasa. `complete_login` llama a `authorize_access_token` y exige `token.get("userinfo")`.
   - `get_identity_provider(request) -> IdentityProvider`, que lo lee de `request.app.state`.
-- [ ] T015 [US1] Implementar en `app/main.py` el `SessionMiddleware`:
+- [X] T015 [US1] Implementar en `app/main.py` el `SessionMiddleware`:
   - **Parámetros**: `secret_key=settings.secret_key`, `session_cookie="pedidofacil_session"`, `max_age=SESSION_MAX_AGE_SECONDS` (`12 * 60 * 60`, constante en `app/security.py`), `same_site="lax"` y `https_only=settings.environment == "production"`.
   - **`app.state.identity_provider`**: guardar ahí `GoogleIdentityProvider(settings)`.
-- [ ] T016 [US1] Implementar `app/routers/auth.py` y sus plantillas, y registrar el router en `app/main.py`:
+- [X] T016 [US1] Implementar `app/routers/auth.py` y sus plantillas, y registrar el router en `app/main.py`:
   - **`GET /login`**: si ya hay sesión, 303 a `safe_next_path(next)` o `/productos`; si no, 200 con `app/templates/auth/login.html`.
   - **`GET /login/google`**: si `settings.google_client_id` o `settings.google_client_secret` faltan (solo posible fuera de producción, que no arranca sin ellos), registra un WARNING «login con Google sin configurar» y responde 303 a `/login?aviso=error` sin crear el proveedor ni hacer peticiones (G1). Si están, guarda `session["login_next"] = safe_next_path(next)` y devuelve `provider.start_login(request, settings.oauth_redirect_uri)`.
   - **`GET /auth/google/callback`**: llama a `provider.complete_login`; con éxito, lee `login_next`, llama a `start_session(request.session, identity, time.time())` y responde 303 a ese destino (revalidado con `safe_next_path`) o a `/productos`.

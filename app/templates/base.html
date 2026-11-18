@@ -13,7 +13,11 @@
   <header class="container">
     <nav>
       <ul><li><strong>PedidoFácil</strong></li></ul>
-      <ul><li><a href="/productos">Productos</a></li></ul>
+      {% set owner = request.session.get("owner") if request is defined else none %}
+      <ul>
+        <li><a href="/productos">Productos</a></li>
+        {% if owner %}<li>{{ owner.name }}</li>{% endif %}
+      </ul>
     </nav>
   </header>
   <main class="container">

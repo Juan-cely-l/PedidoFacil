@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Entrar · PedidoFácil{% endblock %}
+{% block content %}
+<article>
+  <header>
+    <h1>Entrar</h1>
+    <p>Solo el dueño del negocio puede entrar, con su cuenta de Google.</p>
+  </header>
+  {% if notice %}<p role="alert"><strong>{{ notice }}</strong></p>{% endif %}
+  <a href="{{ login_url }}" role="button">Entrar con Google</a>
+</article>
+{% endblock %}

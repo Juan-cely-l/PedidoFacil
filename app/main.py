@@ -6,11 +6,14 @@ from typing import cast
 
 from fastapi import FastAPI
 from pydantic import SecretStr
+from starlette.middleware.sessions import SessionMiddleware
 
 from app import APP_NAME, __version__
 from app.config import Settings, get_settings
 from app.db import build_engine
-from app.routers import catalog, health
+from app.routers import auth, catalog, health
+from app.security import SESSION_COOKIE, SESSION_MAX_AGE_SECONDS
+from app.services.identity import GoogleIdentityProvider
 
 LOGGER_NAME = "pedidofacil"
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -59,7 +62,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Único punto donde se lee la URL: Settings garantiza que existe tras validarse.
     database_url = cast(SecretStr, settings.database_url).get_secret_value()
     application.state.engine = build_engine(database_url)
+    application.state.identity_provider = GoogleIdentityProvider(settings)
+    # Sesión del dueño en una cookie firmada con SECRET_KEY (research.md R5). Starlette la marca
+    # siempre HttpOnly; Secure solo en producción, donde la app se sirve por https.
+    application.add_middleware(
+        SessionMiddleware,
+        secret_key=cast(SecretStr, settings.secret_key).get_secret_value(),
+        session_cookie=SESSION_COOKIE,
+        max_age=SESSION_MAX_AGE_SECONDS,
+        same_site="lax",
+        https_only=settings.environment == "production",
+    )
     application.include_router(health.router)
+    application.include_router(auth.router)
     application.include_router(catalog.router)
 
     if settings.environment == "production" and settings.ai_provider == "fake":
