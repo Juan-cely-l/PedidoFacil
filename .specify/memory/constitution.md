@@ -1,24 +1,19 @@
 <!--
 Informe de impacto de sincronización (Sync Impact Report)
-- Cambio de versión: 1.0.0 → 1.1.0 (MINOR: ampliación del alcance, aprobada el 2026-11-11)
-- Preámbulo: nuevo alcance (cotización con inventario, envío por WhatsApp/Telegram, bot de
-  Telegram para clientes, alertas de stock bajo); se elimina la página pública de seguimiento.
+- Cambio de versión: 1.1.0 → 1.2.0 (MINOR: la autenticación del dueño pasa de contraseña local
+  a un proveedor de identidad externo; enmienda del 2026-11-18)
 - Principios modificados (sin cambio de título):
-  - II. Pruebas deterministas y aisladas: la Bot API de Telegram se simula con httpx.MockTransport.
-  - IV. Stack fijo y simplicidad (YAGNI): Bot API de Telegram vía httpx + webhook; enlaces wa.me y
-    t.me/share; API oficial de WhatsApp fuera del alcance; montos enteros en COP; descuento de
-    inventario transaccional.
-  - V. La IA asiste, el humano decide: reemplazado (la IA nunca fija precios; marcado de productos
-    no reconocidos; reglas de respuesta autónoma del bot; pedidos «Por confirmar»; respaldo manual).
-  - VI. Seguridad y privacidad: el punto de la página pública se reemplaza por el webhook con
-    X-Telegram-Bot-Api-Secret-Token, token del bot en variables de entorno y mensajes a clientes
-    sin datos ajenos ni información interna.
+  - II. Pruebas deterministas y aisladas: las pruebas nunca llaman a Google; el cliente OAuth se
+    sustituye con app.dependency_overrides o httpx.MockTransport.
+  - IV. Stack fijo y simplicidad (YAGNI): autenticación con Google OAuth 2.0 (OpenID Connect) vía
+    authlib sobre SessionMiddleware; la app no guarda contraseñas; pwdlib sale del stack.
+  - VI. Seguridad y privacidad: lista blanca OWNER_EMAILS; cookie de sesión httponly, samesite=lax
+    y secure en producción; tokens de OAuth e id_token fuera de logs y mensajes de error.
 - Secciones añadidas: ninguna
 - Secciones eliminadas: ninguna
 - Plantillas dependientes: no se modifican en este comando (leen la constitución en tiempo de
   ejecución).
 - TODO diferidos: ninguno
-- Nota: este comentario es material temporal de revisión; elimínelo antes de hacer commit.
 -->
 
 # Constitución de PedidoFácil
@@ -53,6 +48,8 @@ deja evidencia auditable del proceso, que es parte de la evaluación académica.
 - La IA se prueba con `TestModel` o `FunctionModel` de Pydantic AI, y
   `ALLOW_MODEL_REQUESTS=False` DEBE estar activado globalmente en las pruebas.
 - La Bot API de Telegram DEBE simularse con `httpx.MockTransport`.
+- Las pruebas NUNCA DEBEN llamar a Google: el cliente OAuth se sustituye con
+  `app.dependency_overrides` o `httpx.MockTransport`.
 - La base de datos de pruebas DEBE ser SQLite en memoria.
 - Cuando un comportamiento dependa del día actual, la fecha DEBE congelarse con
   `time-machine`.
@@ -86,8 +83,8 @@ proyecto individual no tiene.
   `t.me/share`; la API oficial de WhatsApp queda fuera del alcance.
 - Los montos DEBEN guardarse como enteros en pesos colombianos (COP), nunca como `float`.
 - El descuento de inventario DEBE hacerse dentro de una transacción.
-- Autenticación del único usuario (el dueño) con `SessionMiddleware` de Starlette y
-  `pwdlib[argon2]`.
+- Autenticación del dueño con Google OAuth 2.0 (OpenID Connect) mediante `authlib`, sobre el
+  `SessionMiddleware` de Starlette. La aplicación NO DEBE guardar contraseñas.
 - Despliegue en Render con su runtime nativo de Python y uv.
 - Toda dependencia nueva DEBE justificarse en `plan.md` y agregarse con `uv add` solo cuando
   una historia la necesite.
@@ -124,10 +121,16 @@ responsabilidad en el humano mientras la IA ahorra tiempo.
 - Los mensajes enviados a clientes NO DEBEN incluir datos de otros clientes ni información
   interna, como el inventario.
 - Los logs NO DEBEN contener datos personales ni claves.
+- El acceso DEBE restringirse con una lista blanca de correos autorizados (`OWNER_EMAILS`):
+  autenticarse con Google no basta para entrar.
+- La cookie de sesión DEBE ser `httponly` y `samesite=lax`, y `secure` en producción.
+- Los tokens de OAuth y los `id_token` NO DEBEN aparecer en logs ni en mensajes de error.
 
 **Justificación**: el webhook es un endpoint público que cualquiera podría invocar y los datos de
 clientes son personales; sin el secreto, un tercero podría crear pedidos falsos, y un mensaje mal
-armado podría filtrar datos ajenos o del negocio.
+armado podría filtrar datos ajenos o del negocio. Cualquier persona tiene cuenta de Google, así
+que solo la lista blanca separa al dueño del resto; y una cookie robada o un token en un log
+darían acceso a todo el negocio.
 
 ### VII. Trazabilidad
 
@@ -167,4 +170,4 @@ commit.
   DEBE justificarse en la sección de complejidad (Complexity Tracking) de `plan.md`.
 - La guía operativa para el agente de desarrollo está en `CLAUDE.md`.
 
-**Versión**: 1.1.0 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-11
+**Versión**: 1.2.0 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-18
