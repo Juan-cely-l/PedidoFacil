@@ -41,7 +41,7 @@ description: "Tareas de PED-15 · HU-07 Acceso protegido del dueño"
       status_code=302)`.
     - `complete_login` devuelve la `VerifiedIdentity` configurada o lanza el `LoginFailed`
       configurado.
-  - **`GoogleIdentityProvider`**: se prueba solo contra `httpx.MockTransport`.
+  - **`GoogleIdentityProvider`**: se prueba solo contra `httpx2.MockTransport`, porque authlib 1.9 usa httpx2 (research.md R14).
 - **Reloj**: las pruebas de caducidad usan `time_machine.travel(...)` (constitución II).
 - **Tokens centinela**: los valores falsos de tokens empiezan por `TOKEN-CENTINELA-`. Las pruebas
   verifican que no aparecen en `caplog`, en el cuerpo de las respuestas ni en la sesión
@@ -130,20 +130,28 @@ abrir el catálogo.
   - Con sesión, `GET /login` → 303 a `/productos`.
   - La sesión decodificada contiene solo `owner` con `email`, `name` y `login_at`, sin `TOKEN-CENTINELA-` (el proveedor falso adjunta un token centinela que no debe pasar a la sesión).
   - **Login sin configurar en local (G1, contracts/configuration.md)**:
-    - **Montaje**: una app con `Settings(_env_file=None, environment="local", database_url="sqlite://")` y sin `GOOGLE_CLIENT_ID`. **Sin** sustituir `get_identity_provider`, para probar el camino real; un `httpx.MockTransport` que falla si recibe cualquier petición prueba que no se intenta contactar a Google.
+    - **Montaje**: una app con `Settings(_env_file=None, environment="local", database_url="sqlite://")` y sin `GOOGLE_CLIENT_ID`. Se sustituye `get_identity_provider` por `ExplodingIdentityProvider`, que hace fallar la prueba si se le llama: así se prueba que no se intenta contactar a Google (cambio 3 de la fase roja, abajo).
     - **Resultado**: `GET /login/google` → 303 a `/login?aviso=error`. Al seguirla, la página muestra «No se pudo iniciar sesión con Google. Intenta de nuevo» y no queda sesión con `owner`.
 - [ ] T010 [P] [US1] Prueba en `tests/integration/test_session_cookie.py` (nuevo). Tras un login con el proveedor falso, la cabecera `Set-Cookie` de `pedidofacil_session` contiene:
   - `HttpOnly`, `SameSite=lax`, `Max-Age=43200` y `Path=/`;
   - **sin `Secure`** en `test`;
   - **con `Secure`** en la app de producción: `create_app(production_settings)` con `get_session` y `get_identity_provider` sustituidos.
-- [ ] T011 [P] [US1] Prueba en `tests/unit/test_google_identity.py` (nuevo), con authlib real contra `httpx.MockTransport` (research.md R7):
-  - **Google simulado**: el transporte responde `/.well-known/openid-configuration` (issuer `https://accounts.google.com`, endpoints falsos), el JWKS con una clave RSA generada en la prueba (`authlib.jose.JsonWebKey.generate_key("RSA", 2048, is_private=True)`) y el endpoint de token con un `id_token` firmado (`iss`, `aud=test-client-id`, `exp`, `iat`, `email`, `email_verified=True`, `name`, `nonce` igual al guardado) más `access_token="TOKEN-CENTINELA-ACCESO"`.
+- [ ] T011 [P] [US1] Prueba en `tests/unit/test_google_identity.py` (nuevo), con authlib real contra `httpx2.MockTransport` (research.md R7 y R14):
+  - **Google simulado**: el transporte responde `/.well-known/openid-configuration` (issuer `https://accounts.google.com`, endpoints falsos), el JWKS con una clave RSA generada en la prueba (`joserfc.jwk.RSAKey.generate_key(2048, parameters={"kid": ...})`) y el endpoint de token con un `id_token` firmado (`iss`, `aud=test-client-id`, `exp`, `iat`, `email`, `email_verified=True`, `name`, `nonce` igual al guardado) más `access_token="TOKEN-CENTINELA-ACCESO"`.
   - **Ida**: `start_login(request, redirect_uri)` responde 302 hacia el endpoint de autorización con `state` y `nonce` en la URL, y los guarda en la sesión.
   - **Vuelta**: `complete_login` con ese `state` devuelve `VerifiedIdentity(email="dueno@example.com", email_verified=True, name="Dueño")`.
   - **Si authlib no deja inyectar el transporte** (`client_kwargs={"transport": ...}` en `OAuth.register`): detenerse y avisar al autor en esta misma fase roja, sin buscar otro mecanismo por cuenta propia.
-- [ ] T012 [US1] Agregar a `tests/doubles.py` el `FakeIdentityProvider` tipado (ver convenciones) y, en `tests/conftest.py`, la fixture `login(client, identity=...)` que recorre `/login/google` → callback. Agregar los esqueletos con `NotImplementedError`:
+- [ ] T012 [US1] Agregar a `tests/doubles.py` el `FakeIdentityProvider` tipado (ver convenciones) y, en `tests/conftest.py`, las fixtures `identity_provider`, `auth_app` y `anonymous_client`; en `tests/doubles.py`, `log_in(client, next_path)`, `read_session` y `ExplodingIdentityProvider` (ver los cambios aplicados abajo). Agregar los esqueletos con `NotImplementedError`:
   - en `app/services/identity.py`: `VerifiedIdentity`, `LoginFailed`, `IdentityProvider`, `GoogleIdentityProvider`, `get_identity_provider`;
   - en `app/services/auth.py`: `safe_next_path`, `start_session`.
+
+**Cambios aplicados en la fase roja de US1** (2026-11-18, aprobados por el autor):
+
+1. **`log_in` es una función tipada** en `tests/doubles.py` (`log_in(client, next_path=None)`), no una fixture `login` de `conftest`, para usarla con cualquier cliente.
+2. **`anonymous_client` (con `auth_app` e `identity_provider`) se adelanta a T012**, porque US1 ya necesita un cliente sin sesión con el proveedor falso. La fixture `client` del catálogo no cambia hasta T026.
+3. **G1 sustituye el proveedor por `ExplodingIdentityProvider`**: la app local real sin `GOOGLE_CLIENT_ID` y un proveedor que hace fallar la prueba si se le llama. Inyectar un `MockTransport` en el proveedor de la app habría exigido cambiar `create_app` solo para la prueba, y así se verifica algo más fuerte: que ni siquiera se usa el proveedor.
+4. **Claves y firma del `id_token` con `joserfc`** (`RSAKey.generate_key`, `jwt.encode`), la biblioteca JOSE que trae authlib 1.9, en lugar de `authlib.jose`.
+5. **Tipos de error reales para T022**: `joserfc.errors.*` y `httpx2.HTTPError` (ya corregidos en T022).
 
 **⛔ ALTO — revisión de la fase roja de la Historia 1.** Ejecutar `uv run pytest`, mostrar que
 T007–T011 fallan por la razón esperada (sin `ImportError`) y esperar la aprobación del autor.
@@ -226,8 +234,8 @@ T017–T019 fallan por la razón esperada y esperar la aprobación del autor. Lu
 - [ ] T022 [US2] Implementar en `GoogleIdentityProvider.complete_login` (`app/services/identity.py`) la traducción de errores a `LoginFailed` (contracts/auth-routes.md):
   - `OAuthError` con `error == "access_denied"` → `cancelado`;
   - `MismatchingStateError` → `state_invalido`;
-  - errores de `authlib.jose` → `id_token_invalido`;
-  - `httpx.HTTPError` → `red`;
+  - errores de `joserfc.errors.*` (por ejemplo `InvalidClaimError` con un `nonce` distinto, `BadSignatureError` con otra clave) → `id_token_invalido`. authlib 1.9 valida el `id_token` con joserfc, no con `authlib.jose`;
+  - `httpx2.HTTPError` → `red`. authlib 1.9 usa httpx2, no httpx (research.md R14);
   - sin `userinfo` → `sin_id_token`.
 
   El log solo registra `type(error).__name__` y el motivo.
@@ -262,8 +270,8 @@ queda abierta. La lista blanca se revisa en cada petición.
   - **Lista blanca revisada en cada petición**: login con `OWNER_EMAILS=dueno@example.com`; se reconstruye la app con la misma `SECRET_KEY` y `OWNER_EMAILS=otro@example.com`, se reutiliza la cookie y `GET /productos` responde 303 al login.
   - **Cookie alterada**: un byte cambiado → 303 al login, sin error 500.
 - [ ] T026 [US3] Actualizar las fixtures en `tests/conftest.py`:
-  - **`client`**: pasa a tener sesión iniciada con el proveedor falso (usa la fixture `login` de T012). Así `tests/integration/test_catalog_pages.py` sigue sin tocarse.
-  - **`anonymous_client`**: nueva, sin sesión.
+  - **`client`**: pasa a tener sesión iniciada con el proveedor falso (usa la función `log_in` de `tests/doubles.py`, T012). Así `tests/integration/test_catalog_pages.py` sigue sin tocarse.
+  - **`anonymous_client`**: ya existe desde la fase roja de US1 (T012).
   - **Comprobación**: con la protección aún sin implementar, las pruebas del catálogo siguen pasando con `client`.
 - [ ] T027 [US3] Esqueleto `app/security.py` con `PUBLIC_PATHS`, `SESSION_MAX_AGE_SECONDS` (si no existe ya por T015), `LoginRequired` y `require_owner` (`NotImplementedError`), y esqueleto de `current_owner(session, owner_emails, now) -> dict[str, Any] | None` en `app/services/auth.py`.
 
@@ -345,7 +353,7 @@ T030–T031 fallan por la razón esperada y esperar la aprobación del autor. Lu
 
 - **F1 → F2 → US1 → US2 → US3 → US4 → F7**, en el orden de la spec.
 - **US2** depende de US1 (el callback y la plantilla de login).
-- **US3** depende de US1 (la fixture `login` y el `client` autenticado) y de los fundamentos
+- **US3** depende de US1 (la función `log_in` y el `client` autenticado) y de los fundamentos
   (`owner_emails`).
 - **US4** depende de US3 (`current_owner` y la redirección al login).
 - **Despliegue**: no se despliega hasta completar US3. Antes, el login existe pero no protege
@@ -379,7 +387,7 @@ Fase roja (un commit test(PED-15) tras el ⛔ ALTO):
   T009      tests/integration/test_login_flow.py     entrar y volver a la página pedida
   T010      tests/integration/test_session_cookie.py HttpOnly, SameSite, Secure
   T011      tests/unit/test_google_identity.py       authlib contra MockTransport
-  T012      dobles, fixture login y esqueletos
+  T012      dobles, log_in, fixtures y esqueletos
 Fase verde (secuencial): T013 → T014 → T015 → T016
 ```
 

@@ -21,7 +21,7 @@ Starlette que esta historia agrega, porque hoy solo existe `SECRET_KEY`. Enfoque
   implementa con authlib, y el proveedor falso se inyecta con `dependency_overrides` (R3).
 - **authlib valida `state` y `nonce`**, verificado en su código. Hay una condición: sin
   `id_token` no valida nada, así que la app exige `userinfo`. Se prueba contra un Google simulado
-  con `httpx.MockTransport` (R7).
+  con `httpx2.MockTransport` (R7, R14).
 - **Destino de retorno**: solo paths propios; se rechazan las URL absolutas, `//` y `\` (R4).
 - **Sesión**: se limpia al entrar y se vacía al salir; dura 12 h desde el login, con caducidad
   absoluta, y la cookie es `HttpOnly`, `SameSite=lax` y `Secure` en producción (R5).
@@ -41,7 +41,7 @@ la configuración ([data-model.md](data-model.md)).
 
 **Pruebas**:
 - `tests/unit`: destino de retorno, correos, caducidad con `time-machine`, configuración, y
-  `GoogleIdentityProvider` contra `httpx.MockTransport`.
+  `GoogleIdentityProvider` contra `httpx2.MockTransport` (authlib usa httpx2; R14).
 - `tests/integration`: flujo completo con el proveedor falso, cobertura de rutas y atributos de
   la cookie.
 
@@ -68,7 +68,7 @@ en memoria; `/health` no cambia.
 | Principio | Cumplimiento | Estado |
 |---|---|---|
 | I. TDD | Cada tarea irá precedida de su prueba; commits `test` → `feat` → `refactor` | ✅ |
-| II. Pruebas deterministas | Ninguna prueba llama a Google: proveedor falso con `dependency_overrides` y authlib real contra `httpx.MockTransport` (R3, R7); caducidad con `time-machine`; SQLite en memoria | ✅ |
+| II. Pruebas deterministas | Ninguna prueba llama a Google: proveedor falso con `dependency_overrides` y authlib real contra `httpx2.MockTransport` (R3, R7, R14); caducidad con `time-machine`; SQLite en memoria | ✅ |
 | III. Calidad | Sin cambios en la configuración de las herramientas | ✅ |
 | IV. Stack y YAGNI | Google OAuth 2.0 (OIDC) con `authlib` sobre `SessionMiddleware`, sin contraseñas; `itsdangerous` y `time-machine` justificadas (R12); sin tablas; la duración de la sesión es una constante, sin variable de entorno; las capas son router → servicio, y el proveedor va detrás de una interfaz | ✅ |
 | V. La IA asiste | No aplica | ✅ |
@@ -121,7 +121,7 @@ tests/
 ├── doubles.py              # MODIFICAR: FakeIdentityProvider
 ├── unit/
 │   ├── test_auth_service.py       # NUEVO: next seguro, correos, start/end_session, caducidad
-│   ├── test_google_identity.py    # NUEVO: authlib real contra httpx.MockTransport (state, nonce, sin id_token)
+│   ├── test_google_identity.py    # NUEVO: authlib real contra httpx2.MockTransport (state, nonce, sin id_token)
 │   ├── test_config.py             # AMPLIAR: variables nuevas y validación de producción
 │   └── test_env_example.py        # (sin cambios de código; .env.example se amplía)
 └── integration/

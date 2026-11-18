@@ -163,11 +163,12 @@ hecho:
     `userinfo`.** Por eso `GoogleIdentityProvider.complete_login` exige `token["userinfo"]` y, si
     no está, lanza `LoginFailed("sin_id_token")`.
 - **Errores**: authlib lanza `OAuthError` (incluido `MismatchingStateError`) y errores de
-  `authlib.jose`; la red puede lanzar `httpx.HTTPError`. Todos se traducen a `LoginFailed` con un
+  `joserfc.errors` (authlib 1.9 valida el `id_token` con joserfc); la red puede lanzar
+  `httpx2.HTTPError` (authlib 1.9 usa httpx2; R14). Todos se traducen a `LoginFailed` con un
   motivo corto. Al log va solo el tipo de excepción, nunca su mensaje: puede incluir el código de
   autorización o fragmentos del token.
 - **Cómo se prueba**: además del proveedor falso de R3, una prueba unitaria de
-  `GoogleIdentityProvider` corre authlib real contra un Google simulado con `httpx.MockTransport`
+  `GoogleIdentityProvider` corre authlib real contra un Google simulado con `httpx2.MockTransport`
   (metadatos, JWKS con una clave RSA generada en la prueba y endpoint de token). Comprueba que:
   - un `state` desconocido se rechaza;
   - un `id_token` con otro `nonce` se rechaza;
@@ -259,3 +260,39 @@ web) → URIs de redireccionamiento autorizados**:
   - publicarlas expondría la lista completa de endpoints, incluidos los protegidos.
 
   En desarrollo siguen siendo útiles y no hay datos reales.
+
+## R14. Dos bibliotecas HTTP: httpx y httpx2
+
+**Hechos** (verificados el 2026-11-18 en el entorno instalado):
+
+| Biblioteca | Versión | Quién la usa | Por qué está instalada |
+|---|---|---|---|
+| `httpx` | 0.28 | Ningún código del proyecto todavía | La trae `fastapi[standard]` (y `fastapi-cloud-cli`) |
+| `httpx2` | 2.16 | `TestClient` de Starlette y el cliente OAuth de authlib 1.9 | La trae `fastapi[standard]` |
+
+- **`TestClient` usa httpx2**: `starlette/testclient.py` hace `import httpx2 as httpx` y solo
+  recurre a `httpx` si `httpx2` falta. Por eso las pruebas ya tipan las respuestas como
+  `httpx2.Response` (`tests/integration/test_catalog_pages.py`, `tests/doubles.py`).
+- **authlib 1.9 usa httpx2** (`authlib/integrations/httpx_client/_compat.py`). Si `httpx2` falta,
+  recurre a `httpx` con un aviso de obsolescencia. **No declara ninguna de las dos** como
+  dependencia: su metadata solo pide `cryptography` y `joserfc`.
+- **Consecuencia para las pruebas de authlib**: el transporte que se inyecta en authlib
+  (`client_kwargs={"transport": ...}`) debe ser `httpx2.MockTransport`, y sus errores de red son
+  `httpx2.HTTPError`.
+
+**Regla**:
+
+- **Código propio de producción**: usa `httpx` y se prueba con `httpx.MockTransport`, como
+  manda la constitución (principio II). Esto incluye la futura integración con la Bot API de
+  Telegram (principio IV); cuando llegue, `httpx` se declara con `uv add httpx`.
+- **`httpx2` en las pruebas**: aparece solo por dependencias ajenas, en dos casos:
+  - para tipar las respuestas de `TestClient` (`httpx2.Response`);
+  - como `httpx2.MockTransport` en las pruebas que ejercitan authlib por dentro
+    (`tests/unit/test_google_identity.py`).
+- **`httpx2` en `app/`**: solo en `app/services/identity.py`, para tipar el transporte que se le
+  pasa a authlib. Ningún otro módulo de la app la importa.
+
+**Riesgo**: ni `httpx` ni `httpx2` están declaradas directamente; ambas dependen de que
+`fastapi[standard]` las siga trayendo. Si una actualización de FastAPI dejara de traer `httpx2`,
+authlib pasaría a `httpx` con un aviso y las pruebas de T011 fallarían al importar `httpx2`. La
+CI lo detectaría, y en ese caso se declararía `httpx2` con `uv add`.

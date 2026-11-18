@@ -9,6 +9,7 @@ import os
 from collections.abc import Iterator
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlmodel import Session, SQLModel
@@ -19,6 +20,8 @@ import app.models  # noqa: F401  (registra las tablas en SQLModel.metadata)
 # lo importa a nivel de módulo antes de que se fije ENVIRONMENT aquí.
 from app.config import Settings
 from app.db import build_engine
+from app.services.identity import get_identity_provider
+from tests.doubles import FakeIdentityProvider
 
 os.environ["ENVIRONMENT"] = "test"
 
@@ -88,6 +91,30 @@ def client(test_settings: Settings) -> Iterator[TestClient]:
     application = create_app(test_settings)
     SQLModel.metadata.create_all(application.state.engine)
     with TestClient(application) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def identity_provider() -> FakeIdentityProvider:
+    """Proveedor de identidad simulado; cada prueba ajusta su identidad o su falla."""
+    return FakeIdentityProvider()
+
+
+@pytest.fixture
+def auth_app(test_settings: Settings, identity_provider: FakeIdentityProvider) -> FastAPI:
+    """App de pruebas con tablas creadas y el proveedor de identidad simulado (sin Google)."""
+    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+
+    application = create_app(test_settings)
+    SQLModel.metadata.create_all(application.state.engine)
+    application.dependency_overrides[get_identity_provider] = lambda: identity_provider
+    return application
+
+
+@pytest.fixture
+def anonymous_client(auth_app: FastAPI) -> Iterator[TestClient]:
+    """Cliente sin sesión sobre `auth_app`."""
+    with TestClient(auth_app) as test_client:
         yield test_client
 
 
