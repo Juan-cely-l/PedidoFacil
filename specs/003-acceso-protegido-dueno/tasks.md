@@ -129,6 +129,9 @@ abrir el catálogo.
   - Tras entrar, `GET /productos` → 200 y la navegación muestra «Dueño» (el nombre de la identidad).
   - Con sesión, `GET /login` → 303 a `/productos`.
   - La sesión decodificada contiene solo `owner` con `email`, `name` y `login_at`, sin `TOKEN-CENTINELA-` (el proveedor falso adjunta un token centinela que no debe pasar a la sesión).
+  - **Login sin configurar en local (G1, contracts/configuration.md)**:
+    - **Montaje**: una app con `Settings(_env_file=None, environment="local", database_url="sqlite://")` y sin `GOOGLE_CLIENT_ID`. **Sin** sustituir `get_identity_provider`, para probar el camino real; un `httpx.MockTransport` que falla si recibe cualquier petición prueba que no se intenta contactar a Google.
+    - **Resultado**: `GET /login/google` → 303 a `/login?aviso=error`. Al seguirla, la página muestra «No se pudo iniciar sesión con Google. Intenta de nuevo» y no queda sesión con `owner`.
 - [ ] T010 [P] [US1] Prueba en `tests/integration/test_session_cookie.py` (nuevo). Tras un login con el proveedor falso, la cabecera `Set-Cookie` de `pedidofacil_session` contiene:
   - `HttpOnly`, `SameSite=lax`, `Max-Age=43200` y `Path=/`;
   - **sin `Secure`** en `test`;
@@ -160,7 +163,7 @@ Luego, commit `test(PED-15): entrar con la cuenta de Google`.
   - **`app.state.identity_provider`**: guardar ahí `GoogleIdentityProvider(settings)`.
 - [ ] T016 [US1] Implementar `app/routers/auth.py` y sus plantillas, y registrar el router en `app/main.py`:
   - **`GET /login`**: si ya hay sesión, 303 a `safe_next_path(next)` o `/productos`; si no, 200 con `app/templates/auth/login.html`.
-  - **`GET /login/google`**: guarda `session["login_next"] = safe_next_path(next)` y devuelve `provider.start_login(request, settings.oauth_redirect_uri)`.
+  - **`GET /login/google`**: si `settings.google_client_id` o `settings.google_client_secret` faltan (solo posible fuera de producción, que no arranca sin ellos), registra un WARNING «login con Google sin configurar» y responde 303 a `/login?aviso=error` sin crear el proveedor ni hacer peticiones (G1). Si están, guarda `session["login_next"] = safe_next_path(next)` y devuelve `provider.start_login(request, settings.oauth_redirect_uri)`.
   - **`GET /auth/google/callback`**: llama a `provider.complete_login`; con éxito, lee `login_next`, llama a `start_session(request.session, identity, time.time())` y responde 303 a ese destino (revalidado con `safe_next_path`) o a `/productos`.
   - **`app/templates/base.html`**: con sesión, la navegación muestra el nombre del dueño.
 
