@@ -58,7 +58,7 @@ description: "Tareas de PED-15 · HU-07 Acceso protegido del dueño"
 
 **Propósito**: dependencias justificadas en research.md R12; no cambia el comportamiento.
 
-- [X] T001 Agregar dependencias con `uv add authlib itsdangerous` y `uv add --dev time-machine` (actualiza `pyproject.toml` y `uv.lock`). Verificar `uv run pytest` en verde y hacer commit `chore(PED-15): agregar authlib, itsdangerous y time-machine`
+- [ ] T001 Agregar dependencias con `uv add authlib itsdangerous` y `uv add --dev time-machine` (actualiza `pyproject.toml` y `uv.lock`). Verificar `uv run pytest` en verde y hacer commit `chore(PED-15): agregar authlib, itsdangerous y time-machine`
 
 ---
 
