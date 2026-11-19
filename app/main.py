@@ -4,7 +4,7 @@ import logging
 import sys
 from typing import cast
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import SecretStr
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -12,7 +12,13 @@ from app import APP_NAME, __version__
 from app.config import Settings, get_settings
 from app.db import build_engine
 from app.routers import auth, catalog, health
-from app.security import SESSION_COOKIE, SESSION_MAX_AGE_SECONDS
+from app.security import (
+    SESSION_COOKIE,
+    SESSION_MAX_AGE_SECONDS,
+    LoginRequired,
+    redirect_to_login,
+    require_owner,
+)
 from app.services.identity import GoogleIdentityProvider
 
 LOGGER_NAME = "pedidofacil"
@@ -56,7 +62,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs" if docs else None,
         redoc_url="/redoc" if docs else None,
         openapi_url="/openapi.json" if docs else None,
+        # Denegar por defecto: toda ruta, presente o futura, exige la sesión del dueño salvo
+        # las de PUBLIC_PATHS (research.md R1).
+        dependencies=[Depends(require_owner)],
     )
+    application.add_exception_handler(LoginRequired, redirect_to_login)
     # Fuente única de configuración y motor para dependencias y routers.
     application.state.settings = settings
     # Único punto donde se lee la URL: Settings garantiza que existe tras validarse.

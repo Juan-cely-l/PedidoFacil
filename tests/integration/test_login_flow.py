@@ -11,6 +11,7 @@ from sqlmodel import SQLModel
 from app.config import Settings
 from app.services.identity import LoginFailed, VerifiedIdentity, get_identity_provider
 from tests.doubles import (
+    SESSION_COOKIE,
     TOKEN_SENTINEL,
     ExplodingIdentityProvider,
     FakeIdentityProvider,
@@ -313,9 +314,17 @@ def test_una_cookie_de_sesion_alterada_lleva_al_login_sin_errores(
     anonymous_client: TestClient,
 ) -> None:
     log_in(anonymous_client)
-    cookie = anonymous_client.cookies["pedidofacil_session"]
-    tampered = cookie[:-2] + ("A" if cookie[-2] != "A" else "B") + cookie[-1]
-    anonymous_client.cookies.set("pedidofacil_session", tampered)
+    jar = anonymous_client.cookies.jar
+    (original,) = [cookie for cookie in jar if cookie.name == SESSION_COOKIE]
+    assert original.value is not None
+    value = original.value
+    tampered = value[:-2] + ("A" if value[-2] != "A" else "B") + value[-1]
+    # Reemplazarla en su mismo dominio y path: set() sin ellos agrega una segunda cookie y el
+    # cliente seguiría enviando la original.
+    anonymous_client.cookies.set(
+        SESSION_COOKIE, tampered, domain=original.domain, path=original.path
+    )
+    assert [cookie.value for cookie in jar if cookie.name == SESSION_COOKIE] == [tampered]
 
     response = anonymous_client.get("/productos", follow_redirects=False)
 

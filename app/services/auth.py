@@ -55,8 +55,16 @@ def is_authorized(identity: "VerifiedIdentity", owner_emails: frozenset[str]) ->
     return identity.email_verified and normalize_email(identity.email) in owner_emails
 
 
-def current_owner(
-    session: dict[str, Any], owner_emails: frozenset[str], now: float
-) -> dict[str, Any] | None:
-    """El dueño de la sesión si sigue en la lista blanca; si no, None."""
-    raise NotImplementedError
+def current_owner(session: dict[str, Any], owner_emails: frozenset[str]) -> dict[str, Any] | None:
+    """El dueño de la sesión si su correo sigue en la lista blanca; si no, None.
+
+    La lista se revisa en cada petición: quitar un correo cierra su acceso en la siguiente
+    (research.md R6).
+    """
+    owner = session.get("owner")
+    if not isinstance(owner, dict):
+        return None
+    email = owner.get("email")
+    if not isinstance(email, str) or normalize_email(email) not in owner_emails:
+        return None
+    return owner

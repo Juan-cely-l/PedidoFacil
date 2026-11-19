@@ -4,7 +4,13 @@
 exige la sesión del dueño salvo las de `PUBLIC_PATHS`, la única lista de rutas abiertas.
 """
 
-from fastapi import Request
+from urllib.parse import urlencode
+
+from fastapi import Request, status
+from fastapi.responses import RedirectResponse
+
+from app.config import Settings
+from app.services.auth import current_owner
 
 SESSION_COOKIE = "pedidofacil_session"
 # Duración máxima de la sesión: una jornada (research.md R5).
@@ -25,5 +31,27 @@ class LoginRequired(Exception):  # noqa: N818  (nombre del dominio: «hace falta
 
 
 def require_owner(request: Request) -> None:
-    """Dependencia global: deja pasar las rutas públicas y exige el dueño en las demás."""
-    raise NotImplementedError
+    """Dependencia global: deja pasar las rutas públicas y exige el dueño en las demás.
+
+    Sin dueño válido vacía la sesión y lanza LoginRequired. Solo las peticiones GET recuerdan
+    a dónde volver: un formulario enviado no se puede repetir con una redirección.
+    """
+    if request.url.path in PUBLIC_PATHS:
+        return
+    settings: Settings = request.app.state.settings
+    owner = current_owner(request.session, settings.owner_emails)
+    if owner is None:
+        request.session.clear()
+        next_path = None
+        if request.method == "GET":
+            query = request.url.query
+            next_path = request.url.path + (f"?{query}" if query else "")
+        raise LoginRequired(next_path)
+    request.state.owner = owner
+
+
+async def redirect_to_login(request: Request, exc: Exception) -> RedirectResponse:  # noqa: ARG001
+    """Manejador de LoginRequired: 303 al login, con el destino si lo hay."""
+    next_path = exc.next_path if isinstance(exc, LoginRequired) else None
+    url = "/login" if next_path is None else "/login?" + urlencode({"next": next_path})
+    return RedirectResponse(url, status_code=status.HTTP_303_SEE_OTHER)

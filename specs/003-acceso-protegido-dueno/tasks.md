@@ -260,25 +260,25 @@ queda abierta. La lista blanca se revisa en cada petición.
 
 ### Pruebas de la Historia 3 (rojo) ⚠️
 
-- [ ] T024 [P] [US3] Prueba en `tests/integration/test_route_protection.py` (nuevo), según research.md R2.
+- [X] T024 [P] [US3] Prueba en `tests/integration/test_route_protection.py` (nuevo), según research.md R2.
   - **Cómo se recorren las rutas** (cambio de la fase roja, 2026-11-18): con `fastapi.routing.iter_route_contexts(app.routes)`, **no** con `app.routes`. En FastAPI 0.162 los routers incluidos quedan envueltos en `_IncludedRouter`, así que `app.routes` no expone sus `APIRoute` y la prueba habría pasado en vacío. `iter_route_contexts` es la API pública que da cada ruta efectiva con su path completo, sus métodos y su ruta original. Por eso `pyproject.toml` exige `fastapi[standard]>=0.162`.
   - **Salvaguardas contra pasar en vacío**: la prueba de rutas protegidas exige que el recorrido encuentre `GET /productos`, y la de rutas públicas exige que las rutas públicas encontradas sean exactamente `EXPECTED_PUBLIC`. Si FastAPI volviera a cambiar cómo expone las rutas, fallarían en lugar de aprobar sin revisar nada. Usa `create_app(production_settings)` con `dependency_overrides` para `get_session` (`FailingSession` de `tests/doubles.py`) y `get_identity_provider` (el falso), y una constante local `EXPECTED_PUBLIC = {"/health", "/health/live", "/login", "/login/google", "/auth/google/callback"}`, duplicada a propósito.
   - **Rutas que no son `APIRoute`**: si hay alguna, la prueba falla con su path. Sin excepciones: en producción no hay documentación (R13).
   - **Rutas protegidas**: para cada `APIRoute` fuera de `EXPECTED_PUBLIC` y cada método salvo `HEAD`, la petición sin sesión (con `{param}` reemplazado por `1` y `follow_redirects=False`) responde 303 con `Location` que empieza por `/login`.
   - **Rutas públicas**: cada una responde sin `Location` hacia `/login`.
   - **Lista pública**: `app.security.PUBLIC_PATHS == EXPECTED_PUBLIC`.
-- [ ] T025 [P] [US3] Ampliar `tests/integration/test_login_flow.py`:
+- [X] T025 [P] [US3] Ampliar `tests/integration/test_login_flow.py`:
   - **Tras un rechazo** (movido desde T018): con el proveedor falso devolviendo `intruso@gmail.com`, después del callback `GET /productos` responde 303 al login, no 200.
   - Sin sesión, `GET /productos` → 303 a `/login?next=%2Fproductos` (o `next=/productos`, según cómo se codifique), y `GET /productos/3` → `next` con ese path.
   - Sin sesión, `POST /productos` con datos válidos → 303 a `/login` sin `next`; luego, con sesión, `/productos` no muestra ese producto (no se guardó).
   - Sin sesión, `/health` y `/health/live` responden como hoy (200).
   - **Lista blanca revisada en cada petición**: login con `OWNER_EMAILS=dueno@example.com`; se reconstruye la app con la misma `SECRET_KEY` y `OWNER_EMAILS=otro@example.com`, se reutiliza la cookie y `GET /productos` responde 303 al login.
   - **Cookie alterada**: un byte cambiado → 303 al login, sin error 500.
-- [ ] T026 [US3] Actualizar las fixtures en `tests/conftest.py`:
+- [X] T026 [US3] Actualizar las fixtures en `tests/conftest.py`:
   - **`client`**: pasa a tener sesión iniciada con el proveedor falso (usa la función `log_in` de `tests/doubles.py`, T012). Así `tests/integration/test_catalog_pages.py` sigue sin tocarse.
   - **`anonymous_client`**: ya existe desde la fase roja de US1 (T012).
   - **Comprobación**: con la protección aún sin implementar, las pruebas del catálogo siguen pasando con `client`.
-- [ ] T027 [US3] Esqueleto `app/security.py` con `PUBLIC_PATHS`, `SESSION_MAX_AGE_SECONDS` (si no existe ya por T015), `LoginRequired` y `require_owner` (`NotImplementedError`), y esqueleto de `current_owner(session, owner_emails, now) -> dict[str, Any] | None` en `app/services/auth.py`.
+- [X] T027 [US3] Esqueleto `app/security.py` con `PUBLIC_PATHS`, `SESSION_MAX_AGE_SECONDS` (si no existe ya por T015), `LoginRequired` y `require_owner` (`NotImplementedError`), y esqueleto de `current_owner(session, owner_emails, now) -> dict[str, Any] | None` en `app/services/auth.py`.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 3.** Ejecutar `uv run pytest`, mostrar que
 T024–T025 fallan por la razón esperada y que las pruebas del catálogo siguen en verde con el
@@ -287,8 +287,8 @@ T024–T025 fallan por la razón esperada y que las pruebas del catálogo siguen
 
 ### Implementación de la Historia 3 (verde)
 
-- [ ] T028 [US3] Implementar `current_owner(session, owner_emails, now)` en `app/services/auth.py`. Devuelve el `owner` si existe y su correo sigue en la lista blanca (R6); si no, devuelve `None`. La caducidad llega en US4.
-- [ ] T029 [US3] Implementar `app/security.py`:
+- [X] T028 [US3] Implementar `current_owner(session, owner_emails, now)` en `app/services/auth.py`. Devuelve el `owner` si existe y su correo sigue en la lista blanca (R6); si no, devuelve `None`. La caducidad llega en US4.
+- [X] T029 [US3] Implementar `app/security.py`:
   - **`require_owner(request)`**: si `request.url.path in PUBLIC_PATHS`, sale. Si no, llama a `current_owner(...)`; sin dueño, hace `request.session.clear()` y lanza `LoginRequired(next_path)`, con el path y la query solo si el método es `GET`. Con dueño, guarda el owner en `request.state.owner`.
   - **En `app/main.py`**: registrar `FastAPI(dependencies=[Depends(require_owner)])` y un manejador de `LoginRequired` que responde 303 a `/login` (con `?next=` URL-codificado si aplica).
   - **`base.html`**: lee el dueño de `request.state.owner`.

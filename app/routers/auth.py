@@ -7,6 +7,7 @@ dueño: nunca tokens (constitución VI).
 import logging
 import time
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -51,12 +52,16 @@ def _redirect(url: str) -> RedirectResponse:
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, next_path: NextPath = None, aviso: str | None = None) -> Response:
     """Página de login; con sesión, lleva directo al destino o al catálogo."""
+    destination = safe_next_path(next_path)
     if request.session.get("owner"):
-        return _redirect(safe_next_path(next_path) or DEFAULT_AFTER_LOGIN)
+        return _redirect(destination or DEFAULT_AFTER_LOGIN)
+    login_url = "/login/google"
+    if destination:
+        login_url += "?" + urlencode({"next": destination})
     return templates.TemplateResponse(
         request,
         "auth/login.html",
-        {"login_url": "/login/google", "notice": NOTICES.get(aviso or "")},
+        {"login_url": login_url, "notice": NOTICES.get(aviso or "")},
     )
 
 
