@@ -1,9 +1,12 @@
 """Flujo de acceso del dueño con el proveedor de identidad simulado (nunca se llama a Google)."""
 
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs, urlsplit
 
+import httpx2  # el cliente HTTP de TestClient
 import pytest
+import time_machine
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlmodel import SQLModel
@@ -23,6 +26,7 @@ SECRET_KEY = "s" * 32  # la misma de la fixture test_settings
 LOGIN_FAILED_MESSAGE = "No se pudo iniciar sesión con Google. Intenta de nuevo"
 NOT_AUTHORIZED_MESSAGE = "Esta cuenta de Google no tiene acceso a PedidoFácil"
 CANCELLED_MESSAGE = "No se completó el inicio de sesión con Google"
+LOGOUT_MESSAGE = "Cerraste sesión"
 INTRUDER = VerifiedIdentity(email="intruso@gmail.com", email_verified=True, name="Intruso")
 UNVERIFIED_OWNER = VerifiedIdentity(email="dueno@example.com", email_verified=False, name="Dueño")
 
@@ -330,3 +334,131 @@ def test_una_cookie_de_sesion_alterada_lleva_al_login_sin_errores(
 
     assert response.status_code == 303
     assert urlsplit(response.headers["location"]).path == "/login"
+
+
+# Historia 4: cerrar sesión y caducidad (T031, research.md R5 y R8)
+
+
+def _restarted_client(settings: Settings, cookies: dict[str, str]) -> TestClient:
+    """Una app nueva con la configuración dada y la cookie del cliente anterior (un reinicio)."""
+    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+
+    application = create_app(settings)
+    SQLModel.metadata.create_all(application.state.engine)
+    return TestClient(application, cookies=cookies)
+
+
+def _session_cookie_was_set(response: httpx2.Response) -> bool:
+    return any(
+        value.startswith(f"{SESSION_COOKIE}=") for value in response.headers.get_list("set-cookie")
+    )
+
+
+def test_cerrar_sesion_vacia_la_sesion_y_vuelve_al_login(anonymous_client: TestClient) -> None:
+    log_in(anonymous_client)
+
+    response = anonymous_client.post("/logout", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?aviso=salida"
+    assert read_session(anonymous_client, SECRET_KEY) == {}
+    assert LOGOUT_MESSAGE in anonymous_client.get(response.headers["location"]).text
+    after = anonymous_client.get("/productos", follow_redirects=False)
+    assert after.status_code == 303
+    assert urlsplit(after.headers["location"]).path == "/login"
+
+
+def test_cerrar_sesion_por_get_no_esta_permitido_y_no_cierra_nada(
+    anonymous_client: TestClient,
+) -> None:
+    # Con SameSite=lax un GET desde otro sitio lleva la cookie: un enlace o una <img> no
+    # deben poder cerrar la sesión del dueño (CSRF de cierre de sesión).
+    log_in(anonymous_client)
+
+    response = anonymous_client.get("/logout", follow_redirects=False)
+
+    assert response.status_code == 405
+    assert anonymous_client.get("/productos", follow_redirects=False).status_code == 200
+
+
+def test_la_navegacion_ofrece_cerrar_sesion_con_un_formulario_post(
+    anonymous_client: TestClient,
+) -> None:
+    log_in(anonymous_client)
+
+    html = anonymous_client.get("/productos").text
+
+    assert '<form method="post" action="/logout">' in html
+    assert "Cerrar sesión" in html
+
+
+def test_la_sesion_sobrevive_a_un_reinicio_con_la_misma_secret_key(
+    anonymous_client: TestClient, test_settings: Settings
+) -> None:
+    log_in(anonymous_client)
+
+    with _restarted_client(test_settings, dict(anonymous_client.cookies)) as client:
+        response = client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 200
+
+
+def test_rotar_la_secret_key_invalida_todas_las_sesiones(
+    anonymous_client: TestClient, test_settings: Settings
+) -> None:
+    log_in(anonymous_client)
+    rotated = test_settings.model_copy(update={"secret_key": SecretStr("r" * 32)})
+
+    with _restarted_client(rotated, dict(anonymous_client.cookies)) as client:
+        response = client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
+
+
+def test_starlette_no_renueva_la_cookie_cuando_la_sesion_solo_se_lee(
+    anonymous_client: TestClient,
+) -> None:
+    """Guardia del comportamiento de Starlette 1.10 (research.md R5).
+
+    SessionMiddleware solo reenvía la cookie cuando la sesión se modifica: consultar páginas
+    no la renueva. Si una versión futura volviera a renovarla en cada respuesta, esta prueba
+    avisa de que la cookie pasó a ser deslizante.
+    """
+    t0 = datetime(2026, 11, 18, 8, 0, tzinfo=UTC)
+    with time_machine.travel(t0, tick=False) as traveller:
+        log_in(anonymous_client)
+
+        for hours in (2, 6, 11):
+            traveller.move_to(t0 + timedelta(hours=hours))
+            response = anonymous_client.get("/productos", follow_redirects=False)
+            assert response.status_code == 200, f"a las {hours} h"
+            assert not _session_cookie_was_set(response), f"a las {hours} h se renovó la cookie"
+
+
+def test_la_sesion_caduca_a_las_12_horas_del_login_aunque_se_renueve_la_cookie(
+    anonymous_client: TestClient,
+) -> None:
+    """Tope absoluto: 12 h desde login_at, aunque la cookie se haya renovado (research.md R5).
+
+    /login/google escribe en la sesión (login_next y el state del login), así que Starlette
+    renueva la cookie y su firma por 12 h más. Sin el tope, la cookie renovada a las 11 h
+    seguiría valiendo a las 12 h + 1 s y esta prueba fallaría.
+    """
+    t0 = datetime(2026, 11, 18, 8, 0, tzinfo=UTC)
+    with time_machine.travel(t0, tick=False) as traveller:
+        log_in(anonymous_client)
+        for hours in (2, 6):
+            traveller.move_to(t0 + timedelta(hours=hours))
+            assert anonymous_client.get("/productos", follow_redirects=False).status_code == 200
+
+        traveller.move_to(t0 + timedelta(hours=11))
+        renewal = anonymous_client.get("/login/google", follow_redirects=False)
+        assert _session_cookie_was_set(renewal), "a las 11 h /login/google no renovó la cookie"
+
+        traveller.move_to(t0 + timedelta(hours=12, seconds=1))
+        response = anonymous_client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
+    assert read_session(anonymous_client, SECRET_KEY) == {}

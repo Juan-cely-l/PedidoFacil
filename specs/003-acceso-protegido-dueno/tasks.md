@@ -317,12 +317,11 @@ reloj simulado, comprobar la caducidad.
   - **Navegación**: con sesión, el HTML de `/productos` contiene `<form method="post" action="/logout">` con el botón «Cerrar sesión».
   - **Sobrevive a un reinicio**: con `time_machine.travel` fijo, login; se crea una app nueva con la misma configuración (misma `SECRET_KEY`) y se reutiliza la cookie: `GET /productos` → 200.
   - **Rotación de `SECRET_KEY`**: lo mismo con otra `SECRET_KEY` → 303 al login (R8).
-  - **Caducidad absoluta con la cookie deslizante viva**: con `time_machine.travel(t0, tick=False)` y `traveller.move_to(...)`:
-    - login en `t0`;
-    - `GET /productos` a `t0 + 2 h`, `t0 + 6 h` y `t0 + 11 h` responde 200 cada vez, y en cada respuesta llega un `Set-Cookie` de `pedidofacil_session` (Starlette renueva la cookie y su `Max-Age`, así que sin tope absoluto la sesión seguiría viva hasta `t0 + 23 h`);
-    - `GET /productos` a `t0 + 12 h + 1 s` responde 303 al login, y la sesión decodificada queda vacía.
+  - **Caducidad: dos pruebas** (cambio de la fase roja, 2026-11-19). Starlette 1.10 solo renueva la cookie cuando la sesión se modifica, no en cada respuesta (research.md R5). Ambas usan `time_machine.travel(t0, tick=False)` y `traveller.move_to(...)`:
+    - **Guardia del comportamiento de Starlette 1.10**: login en `t0`. `GET /productos` a `t0 + 2 h`, `t0 + 6 h` y `t0 + 11 h` responde 200 cada vez y **sin** `Set-Cookie` de `pedidofacil_session`, porque leer no renueva. Si una versión futura volviera deslizante la cookie, esta prueba avisa.
+    - **Tope absoluto**: login en `t0`; `GET /productos` a las 2 y 6 h responde 200. A las 11 h, `GET /login/google` (sin seguir la redirección) escribe en la sesión y **sí** renueva la cookie, cosa que se verifica en el `Set-Cookie`. A `t0 + 12 h + 1 s`, `GET /productos` responde 303 al login y la sesión decodificada queda vacía.
 
-    **Esta prueba DEBE fallar si se elimina el tope absoluto** (la comparación con `login_at` en `current_owner`): sin él, la petición de las 12 h + 1 s respondería 200 porque la cookie se renovó a las 11 h. Para comprobarlo en la fase verde, comentar temporalmente el tope, ver la prueba en rojo y restaurarlo (no se hace commit de ese paso).
+    **La prueba del tope DEBE fallar si se elimina el tope absoluto** (la comparación con `login_at` en `current_owner`): sin él, la cookie renovada a las 11 h seguiría valiendo a las 12 h + 1 s y la respuesta sería 200. En la fase roja falla justo así. Para comprobarlo en la fase verde, comentar temporalmente el tope, ver la prueba en rojo y restaurarlo (no se hace commit de ese paso).
 - [ ] T032 [US4] Esqueleto de `end_session` con `NotImplementedError` en `app/services/auth.py`.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 4.** Ejecutar `uv run pytest`, mostrar que
@@ -349,6 +348,12 @@ T030–T031 fallan por la razón esperada y esperar la aprobación del autor. Lu
 - [ ] T037 Ejecutar `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` y `uv run mypy`; confirmar cobertura ≥ 80 % con ramas y buscar `TOKEN-CENTINELA` en la salida completa de pytest (`-s`), donde no debe aparecer.
 - [ ] T038 Validar a mano [quickstart.md](quickstart.md), recorrido local 1–7, con un cliente OAuth real de Google.
 - [ ] T039 Pasos manuales del autor **antes de integrar en `main`**: en Google Cloud, registrar `https://pedidofacil-6nky.onrender.com/auth/google/callback`; en Render, definir `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_EMAILS` y `PUBLIC_BASE_URL`. Sin ellas, la app no arranca en producción, por diseño. **Después del merge**: verificar la sección «Producción» de quickstart.md.
+
+**Mejora anotada (no se implementa en PED-15)**: `/login/google` podría llevar directo al catálogo
+(o al `next` validado) cuando ya hay una sesión válida, en lugar de volver a pasar por Google.
+Además de ahorrarle un paso al dueño, quitaría hoy la única vía que renueva la cookie (research.md
+R5). El tope absoluto se mantiene igual, porque cualquier escritura futura en la sesión
+reabriría esa vía.
 
 ---
 

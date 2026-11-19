@@ -4,7 +4,14 @@ from typing import Any
 
 import pytest
 
-from app.services.auth import is_authorized, normalize_email, safe_next_path, start_session
+from app.services.auth import (
+    current_owner,
+    end_session,
+    is_authorized,
+    normalize_email,
+    safe_next_path,
+    start_session,
+)
 from app.services.identity import VerifiedIdentity
 
 # Normalización de correos para la lista blanca (T003)
@@ -109,3 +116,43 @@ def test_con_la_lista_vacia_nadie_esta_autorizado() -> None:
     identity = VerifiedIdentity(email="dueno@example.com", email_verified=True, name="Dueño")
 
     assert is_authorized(identity, frozenset()) is False
+
+
+# Caducidad absoluta y cierre de sesión (T030, research.md R5)
+
+LOGIN_AT = 1_795_000_000.0
+TWELVE_HOURS = 12 * 60 * 60
+
+
+def _owner_session() -> dict[str, Any]:
+    return {"owner": {"email": "dueno@example.com", "name": "Dueño", "login_at": LOGIN_AT}}
+
+
+@pytest.mark.parametrize("elapsed", [0, 2 * 3600, 6 * 3600, 11 * 3600, TWELVE_HOURS - 1])
+def test_la_sesion_vale_dentro_de_las_12_horas_desde_el_login(elapsed: int) -> None:
+    owner = current_owner(_owner_session(), OWNER_EMAILS, now=LOGIN_AT + elapsed)  # type: ignore[call-arg]
+
+    assert owner is not None
+    assert owner["email"] == "dueno@example.com"
+
+
+@pytest.mark.parametrize("elapsed", [TWELVE_HOURS, TWELVE_HOURS + 1, 3 * TWELVE_HOURS])
+def test_la_sesion_caduca_a_las_12_horas_desde_el_login(elapsed: int) -> None:
+    # El tope es absoluto: cuenta desde login_at, sin importar la actividad intermedia.
+    owner = current_owner(_owner_session(), OWNER_EMAILS, now=LOGIN_AT + elapsed)  # type: ignore[call-arg]
+
+    assert owner is None
+
+
+def test_una_sesion_sin_momento_de_login_no_vale() -> None:
+    session = {"owner": {"email": "dueno@example.com", "name": "Dueño"}}
+
+    assert current_owner(session, OWNER_EMAILS, now=LOGIN_AT) is None  # type: ignore[call-arg]
+
+
+def test_end_session_vacia_todos_los_datos_de_la_sesion() -> None:
+    session = _owner_session() | {"login_next": "/productos", "otra_clave": 1}
+
+    end_session(session)
+
+    assert session == {}

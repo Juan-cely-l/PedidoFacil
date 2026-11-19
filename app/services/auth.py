@@ -68,3 +68,8 @@ def current_owner(session: dict[str, Any], owner_emails: frozenset[str]) -> dict
     if not isinstance(email, str) or normalize_email(email) not in owner_emails:
         return None
     return owner
+
+
+def end_session(session: dict[str, Any]) -> None:
+    """Cierra la sesión vaciando todos sus datos (no basta con borrar la cookie)."""
+    raise NotImplementedError

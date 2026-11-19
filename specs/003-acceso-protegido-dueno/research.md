@@ -111,10 +111,24 @@ Decisiones técnicas del plan. Las de seguridad (R1–R6) siguen el diseño pedi
     que lo sepa (CSRF de cierre de sesión). Un `POST` iniciado desde otro sitio no lleva la cookie
     con `lax`. Por eso `/logout` solo existe para `POST`: un `GET /logout` responde `405` y la
     sesión sigue intacta, cosa que se prueba.
-  - **Caducidad absoluta**: Starlette reenvía la cookie con `max_age` en cada respuesta, así que
-    su vencimiento se corre con el uso. Por eso `require_owner` además compara `login_at` con el
-    reloj y rechaza (y limpia) la sesión cuando pasan 12 h desde el login, aunque haya actividad.
-    Se prueba congelando la fecha con `time-machine` (constitución II).
+  - **Cuándo se renueva la cookie** (corregido el 2026-11-19, verificado en
+    `starlette/middleware/sessions.py` de Starlette 1.10.0): `SessionMiddleware` **solo** envía
+    `Set-Cookie` cuando la sesión **se modificó** (`if session.modified and session`). Una
+    petición que solo lee la sesión no la renueva. La cookie (`Max-Age`) y su firma
+    (`itsdangerous`, `max_age`) vencen 12 h después de la última **escritura** en la sesión, no
+    de la última petición. La versión anterior de este apartado decía que Starlette reenvía la
+    cookie en cada respuesta, y eso es falso en 1.10.
+  - **Vía de renovación**: cualquier ruta que escriba en la sesión vuelve a firmar la cookie y le
+    da 12 h más. Hoy esa ruta es **`/login/google`**: es pública y guarda `login_next` y el
+    `state` del login aunque el dueño ya tenga sesión. Sin un tope propio, visitarla cada pocas
+    horas mantendría la sesión viva indefinidamente.
+  - **Caducidad absoluta**: por eso `current_owner` compara `login_at` con el reloj y rechaza (y
+    limpia) la sesión cuando pasan 12 h desde el login, aunque la cookie se haya renovado. Se
+    prueba congelando la fecha con `time-machine` (constitución II), con dos pruebas:
+    - **Guardia de Starlette 1.10**: las lecturas a las 2, 6 y 11 h no renuevan la cookie. Si
+      una versión futura la volviera deslizante, esta prueba avisa.
+    - **Tope absoluto**: `/login/google` a las 11 h renueva la cookie y, aun así, la sesión
+      caduca a las 12 h + 1 s. Sin el tope, esta prueba falla.
   - **Sobrevive a un reinicio**: la sesión vive firmada en la cookie, no en memoria. Mientras
     `SECRET_KEY` no cambie, un reinicio o un redeploy no la invalida.
 - **Duración elegida: 12 h** (una jornada). Es una constante del módulo, sin variable de entorno
