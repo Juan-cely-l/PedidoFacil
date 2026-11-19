@@ -21,7 +21,7 @@ import app.models  # noqa: F401  (registra las tablas en SQLModel.metadata)
 from app.config import Settings
 from app.db import build_engine
 from app.services.identity import get_identity_provider
-from tests.doubles import FakeIdentityProvider
+from tests.doubles import FakeIdentityProvider, log_in
 
 os.environ["ENVIRONMENT"] = "test"
 
@@ -84,13 +84,13 @@ def session() -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(test_settings: Settings) -> Iterator[TestClient]:
-    """Cliente HTTP de una app de pruebas con las tablas creadas en su base en memoria."""
-    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+def client(auth_app: FastAPI) -> Iterator[TestClient]:
+    """Cliente HTTP con la sesión del dueño iniciada (proveedor simulado, sin Google).
 
-    application = create_app(test_settings)
-    SQLModel.metadata.create_all(application.state.engine)
-    with TestClient(application) as test_client:
+    Las rutas de gestión exigen sesión (PED-15): así las pruebas del catálogo no cambian.
+    """
+    with TestClient(auth_app) as test_client:
+        log_in(test_client)
         yield test_client
 
 

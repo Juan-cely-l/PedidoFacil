@@ -1,6 +1,7 @@
 """Flujo de acceso del dueño con el proveedor de identidad simulado (nunca se llama a Google)."""
 
 from collections.abc import Callable, Iterator
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -215,3 +216,108 @@ def test_los_rechazos_no_dejan_correos_ni_tokens_en_logs_ni_respuestas(
     for text in (app_log.text, callback.text, page.text):
         assert "intruso@gmail.com" not in text
         assert TOKEN_SENTINEL not in text
+
+
+# Historia 3: la gestión exige sesión (T025)
+
+
+def _login_redirect_next(location: str) -> str | None:
+    """Valida que la redirección vaya a /login y devuelve su parámetro next, si lo trae."""
+    parts = urlsplit(location)
+    assert parts.path == "/login"
+    values = parse_qs(parts.query).get("next")
+    return values[0] if values else None
+
+
+@pytest.mark.parametrize("path", ["/productos", "/productos/3", "/productos?inactivos=1"])
+def test_sin_sesion_una_pagina_de_gestion_redirige_al_login_recordando_el_destino(
+    anonymous_client: TestClient, path: str
+) -> None:
+    response = anonymous_client.get(path, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert _login_redirect_next(response.headers["location"]) == path
+
+
+def test_la_pagina_de_login_lleva_el_destino_hasta_google(anonymous_client: TestClient) -> None:
+    page = anonymous_client.get("/login", params={"next": "/productos/3"})
+
+    assert 'href="/login/google?next=%2Fproductos%2F3"' in page.text
+
+
+def test_tras_entrar_desde_una_pagina_protegida_se_vuelve_a_ella(
+    anonymous_client: TestClient,
+) -> None:
+    redirect = anonymous_client.get("/productos/3", follow_redirects=False)
+    destination = _login_redirect_next(redirect.headers["location"])
+
+    callback = log_in(anonymous_client, next_path=destination)
+
+    assert callback.headers["location"] == "/productos/3"
+
+
+def test_sin_sesion_un_formulario_no_guarda_nada(anonymous_client: TestClient) -> None:
+    data = {"name": "Producto fantasma", "description": "", "price": "5000"}
+
+    response = anonymous_client.post("/productos", data=data, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+    log_in(anonymous_client)
+    assert "Producto fantasma" not in anonymous_client.get("/productos").text
+
+
+@pytest.mark.parametrize("path", ["/health", "/health/live"])
+def test_sin_sesion_los_health_checks_siguen_respondiendo(
+    anonymous_client: TestClient, path: str
+) -> None:
+    response = anonymous_client.get(path, follow_redirects=False)
+
+    assert response.status_code == 200
+
+
+def test_tras_un_login_rechazado_la_gestion_sigue_cerrada(
+    anonymous_client: TestClient, identity_provider: FakeIdentityProvider
+) -> None:
+    # Movida desde T018: en US2 /productos todavía no exigía sesión.
+    identity_provider.identity = INTRUDER
+    log_in(anonymous_client)
+
+    response = anonymous_client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert _login_redirect_next(response.headers["location"]) == "/productos"
+
+
+def test_quitar_un_correo_de_la_lista_cierra_su_sesion_en_la_siguiente_peticion(
+    anonymous_client: TestClient, test_settings: Settings
+) -> None:
+    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+
+    log_in(anonymous_client)
+    # Mismo SECRET_KEY (la cookie sigue siendo válida), otra lista blanca: como tras un redeploy.
+    other_settings = test_settings.model_copy(
+        update={"owner_emails": frozenset({"otro@example.com"})}
+    )
+    restarted = create_app(other_settings)
+    SQLModel.metadata.create_all(restarted.state.engine)
+
+    with TestClient(restarted, cookies=dict(anonymous_client.cookies)) as client:
+        response = client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
+
+
+def test_una_cookie_de_sesion_alterada_lleva_al_login_sin_errores(
+    anonymous_client: TestClient,
+) -> None:
+    log_in(anonymous_client)
+    cookie = anonymous_client.cookies["pedidofacil_session"]
+    tampered = cookie[:-2] + ("A" if cookie[-2] != "A" else "B") + cookie[-1]
+    anonymous_client.cookies.set("pedidofacil_session", tampered)
+
+    response = anonymous_client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
