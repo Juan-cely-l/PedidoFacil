@@ -4,17 +4,25 @@
 exige la sesión del dueño salvo las de `PUBLIC_PATHS`, la única lista de rutas abiertas.
 """
 
+import time
 from urllib.parse import urlencode
 
 from fastapi import Request, status
 from fastapi.responses import RedirectResponse
 
 from app.config import Settings
-from app.services.auth import current_owner
+from app.services.auth import SESSION_MAX_AGE_SECONDS, current_owner
+
+__all__ = [
+    "PUBLIC_PATHS",
+    "SESSION_COOKIE",
+    "SESSION_MAX_AGE_SECONDS",
+    "LoginRequired",
+    "redirect_to_login",
+    "require_owner",
+]
 
 SESSION_COOKIE = "pedidofacil_session"
-# Duración máxima de la sesión: una jornada (research.md R5).
-SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 
 # Única lista de rutas abiertas: los health checks (Render) y el propio login.
 PUBLIC_PATHS = frozenset(
@@ -39,7 +47,7 @@ def require_owner(request: Request) -> None:
     if request.url.path in PUBLIC_PATHS:
         return
     settings: Settings = request.app.state.settings
-    owner = current_owner(request.session, settings.owner_emails)
+    owner = current_owner(request.session, settings.owner_emails, time.time())
     if owner is None:
         request.session.clear()
         next_path = None

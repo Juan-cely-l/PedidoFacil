@@ -10,6 +10,8 @@ if TYPE_CHECKING:
     from app.services.identity import VerifiedIdentity
 
 DEFAULT_AFTER_LOGIN = "/productos"
+# Duración máxima de la sesión: una jornada, contada desde el login (research.md R5).
+SESSION_MAX_AGE_SECONDS = 12 * 60 * 60
 # Volver a una ruta del propio login tras entrar no tiene sentido y puede crear bucles.
 _LOGIN_PATHS = frozenset({"/login", "/login/google", "/auth/google/callback", "/logout"})
 
@@ -55,11 +57,14 @@ def is_authorized(identity: "VerifiedIdentity", owner_emails: frozenset[str]) ->
     return identity.email_verified and normalize_email(identity.email) in owner_emails
 
 
-def current_owner(session: dict[str, Any], owner_emails: frozenset[str]) -> dict[str, Any] | None:
-    """El dueño de la sesión si su correo sigue en la lista blanca; si no, None.
+def current_owner(
+    session: dict[str, Any], owner_emails: frozenset[str], now: float
+) -> dict[str, Any] | None:
+    """El dueño de la sesión si sigue en la lista blanca y no pasaron 12 h; si no, None.
 
     La lista se revisa en cada petición: quitar un correo cierra su acceso en la siguiente
-    (research.md R6).
+    (research.md R6). El tope cuenta desde login_at y no se mueve aunque Starlette renueve la
+    cookie al escribir en la sesión (research.md R5).
     """
     owner = session.get("owner")
     if not isinstance(owner, dict):
@@ -67,9 +72,17 @@ def current_owner(session: dict[str, Any], owner_emails: frozenset[str]) -> dict
     email = owner.get("email")
     if not isinstance(email, str) or normalize_email(email) not in owner_emails:
         return None
+    login_at = owner.get("login_at")
+    if isinstance(login_at, bool) or not isinstance(login_at, int | float):
+        return None
+    if now - login_at >= SESSION_MAX_AGE_SECONDS:  # tope absoluto
+        return None
     return owner
 
 
 def end_session(session: dict[str, Any]) -> None:
-    """Cierra la sesión vaciando todos sus datos (no basta con borrar la cookie)."""
-    raise NotImplementedError
+    """Cierra la sesión vaciando todos sus datos (no basta con borrar la cookie).
+
+    Con la sesión vacía, Starlette envía la cookie vencida.
+    """
+    session.clear()

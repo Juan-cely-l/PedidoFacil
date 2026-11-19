@@ -16,7 +16,14 @@
       {% set owner = request.session.get("owner") if request is defined else none %}
       <ul>
         <li><a href="/productos">Productos</a></li>
-        {% if owner %}<li>{{ owner.name }}</li>{% endif %}
+        {% if owner %}
+        <li>{{ owner.name }}</li>
+        <li>
+          <form method="post" action="/logout">
+            <button type="submit" class="secondary">Cerrar sesión</button>
+          </form>
+        </li>
+        {% endif %}
       </ul>
     </nav>
   </header>

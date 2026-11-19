@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from app.config import Settings, get_app_settings
 from app.services.auth import (
     DEFAULT_AFTER_LOGIN,
+    end_session,
     is_authorized,
     safe_next_path,
     start_session,
@@ -35,6 +36,7 @@ NOTICES = {
     "no_autorizado": "Esta cuenta de Google no tiene acceso a PedidoFácil",
     "cancelado": "No se completó el inicio de sesión con Google",
     "error": "No se pudo iniciar sesión con Google. Intenta de nuevo",
+    "salida": "Cerraste sesión",
 }
 # Motivo del rechazo → aviso que ve el dueño (contracts/auth-routes.md); el resto, «error».
 _NOTICE_BY_REASON = {
@@ -91,6 +93,15 @@ async def google_callback(request: Request, settings: AppSettings, provider: Pro
     start_session(request.session, identity, time.time())
     logger.info("Inicio de sesión aceptado")
     return _redirect(destination or DEFAULT_AFTER_LOGIN)
+
+
+@router.post("/logout")
+def logout(request: Request) -> Response:
+    """Cierra la sesión. Solo por POST: con SameSite=lax un GET desde otro sitio llevaría la
+    cookie, y un enlace o una imagen podrían cerrar la sesión del dueño (research.md R5)."""
+    end_session(request.session)
+    logger.info("Sesión cerrada")
+    return _redirect("/login?aviso=salida")
 
 
 def _reject(request: Request, reason: str) -> RedirectResponse:

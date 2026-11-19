@@ -130,7 +130,7 @@ def _owner_session() -> dict[str, Any]:
 
 @pytest.mark.parametrize("elapsed", [0, 2 * 3600, 6 * 3600, 11 * 3600, TWELVE_HOURS - 1])
 def test_la_sesion_vale_dentro_de_las_12_horas_desde_el_login(elapsed: int) -> None:
-    owner = current_owner(_owner_session(), OWNER_EMAILS, now=LOGIN_AT + elapsed)  # type: ignore[call-arg]
+    owner = current_owner(_owner_session(), OWNER_EMAILS, now=LOGIN_AT + elapsed)
 
     assert owner is not None
     assert owner["email"] == "dueno@example.com"
@@ -139,7 +139,7 @@ def test_la_sesion_vale_dentro_de_las_12_horas_desde_el_login(elapsed: int) -> N
 @pytest.mark.parametrize("elapsed", [TWELVE_HOURS, TWELVE_HOURS + 1, 3 * TWELVE_HOURS])
 def test_la_sesion_caduca_a_las_12_horas_desde_el_login(elapsed: int) -> None:
     # El tope es absoluto: cuenta desde login_at, sin importar la actividad intermedia.
-    owner = current_owner(_owner_session(), OWNER_EMAILS, now=LOGIN_AT + elapsed)  # type: ignore[call-arg]
+    owner = current_owner(_owner_session(), OWNER_EMAILS, now=LOGIN_AT + elapsed)
 
     assert owner is None
 
@@ -147,7 +147,7 @@ def test_la_sesion_caduca_a_las_12_horas_desde_el_login(elapsed: int) -> None:
 def test_una_sesion_sin_momento_de_login_no_vale() -> None:
     session = {"owner": {"email": "dueno@example.com", "name": "Dueño"}}
 
-    assert current_owner(session, OWNER_EMAILS, now=LOGIN_AT) is None  # type: ignore[call-arg]
+    assert current_owner(session, OWNER_EMAILS, now=LOGIN_AT) is None
 
 
 def test_end_session_vacia_todos_los_datos_de_la_sesion() -> None:

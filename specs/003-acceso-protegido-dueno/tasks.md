@@ -308,10 +308,10 @@ reloj simulado, comprobar la caducidad.
 
 ### Pruebas de la Historia 4 (rojo) ⚠️
 
-- [ ] T030 [P] [US4] Ampliar `tests/unit/test_auth_service.py`:
+- [X] T030 [P] [US4] Ampliar `tests/unit/test_auth_service.py`:
   - **Caducidad absoluta**: `current_owner` con `login_at = t0` devuelve el dueño en `t0 + 12 h - 1 s` y `None` en `t0 + 12 h + 1 s`, aunque haya actividad en medio (R5). Usar `time_machine.travel` o pasar `now` explícito.
   - **`end_session(session)`**: deja la sesión vacía (`{}`), incluida cualquier clave ajena.
-- [ ] T031 [P] [US4] Ampliar `tests/integration/test_login_flow.py`:
+- [X] T031 [P] [US4] Ampliar `tests/integration/test_login_flow.py`:
   - **Cerrar sesión**: con sesión, `POST /logout` → 303 a `/login?aviso=salida`. La página muestra «Cerraste sesión», la respuesta envía la cookie vencida o vacía, y después `GET /productos` responde 303 al login.
   - **Sin cierre por `GET`**: con sesión, `GET /logout` → 405, y `GET /productos` sigue respondiendo 200 (R5: CSRF de cierre de sesión).
   - **Navegación**: con sesión, el HTML de `/productos` contiene `<form method="post" action="/logout">` con el botón «Cerrar sesión».
@@ -322,7 +322,7 @@ reloj simulado, comprobar la caducidad.
     - **Tope absoluto**: login en `t0`; `GET /productos` a las 2 y 6 h responde 200. A las 11 h, `GET /login/google` (sin seguir la redirección) escribe en la sesión y **sí** renueva la cookie, cosa que se verifica en el `Set-Cookie`. A `t0 + 12 h + 1 s`, `GET /productos` responde 303 al login y la sesión decodificada queda vacía.
 
     **La prueba del tope DEBE fallar si se elimina el tope absoluto** (la comparación con `login_at` en `current_owner`): sin él, la cookie renovada a las 11 h seguiría valiendo a las 12 h + 1 s y la respuesta sería 200. En la fase roja falla justo así. Para comprobarlo en la fase verde, comentar temporalmente el tope, ver la prueba en rojo y restaurarlo (no se hace commit de ese paso).
-- [ ] T032 [US4] Esqueleto de `end_session` con `NotImplementedError` en `app/services/auth.py`.
+- [X] T032 [US4] Esqueleto de `end_session` con `NotImplementedError` en `app/services/auth.py`.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 4.** Ejecutar `uv run pytest`, mostrar que
 T030–T031 fallan por la razón esperada y esperar la aprobación del autor. Luego, commit
@@ -330,8 +330,8 @@ T030–T031 fallan por la razón esperada y esperar la aprobación del autor. Lu
 
 ### Implementación de la Historia 4 (verde)
 
-- [ ] T033 [US4] Implementar `end_session` y la caducidad absoluta en `current_owner` (`now - login_at >= SESSION_MAX_AGE_SECONDS` → `None`) en `app/services/auth.py`.
-- [ ] T034 [US4] Implementar `POST /logout` en `app/routers/auth.py`: llama a `end_session(request.session)` y responde 303 a `/login?aviso=salida`; sin ruta `GET`. En `app/templates/base.html`, agregar el formulario `POST /logout` con el botón «Cerrar sesión».
+- [X] T033 [US4] Implementar `end_session` y la caducidad absoluta en `current_owner` (`now - login_at >= SESSION_MAX_AGE_SECONDS` → `None`) en `app/services/auth.py`.
+- [X] T034 [US4] Implementar `POST /logout` en `app/routers/auth.py`: llama a `end_session(request.session)` y responde 303 a `/login?aviso=salida`; sin ruta `GET`. En `app/templates/base.html`, agregar el formulario `POST /logout` con el botón «Cerrar sesión».
 
 **Punto de control**: las cuatro historias en verde.
 
