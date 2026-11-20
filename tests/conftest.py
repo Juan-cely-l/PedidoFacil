@@ -9,7 +9,9 @@ import os
 from collections.abc import Iterator
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlmodel import Session, SQLModel
 
 import app.models  # noqa: F401  (registra las tablas en SQLModel.metadata)
@@ -18,6 +20,8 @@ import app.models  # noqa: F401  (registra las tablas en SQLModel.metadata)
 # lo importa a nivel de módulo antes de que se fije ENVIRONMENT aquí.
 from app.config import Settings
 from app.db import build_engine
+from app.services.identity import get_identity_provider
+from tests.doubles import FakeIdentityProvider, log_in
 
 os.environ["ENVIRONMENT"] = "test"
 
@@ -51,8 +55,19 @@ def app_log(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCaptureFixtu
 
 @pytest.fixture
 def test_settings() -> Settings:
-    """Configuración del ambiente de pruebas, sin leer ningún archivo .env."""
-    return Settings(_env_file=None, environment="test")
+    """Configuración del ambiente de pruebas, sin leer ningún archivo .env.
+
+    La SECRET_KEY es fija para poder decodificar la cookie de sesión en las pruebas, y las
+    credenciales de Google son ficticias: ninguna prueba llama a Google.
+    """
+    return Settings(
+        _env_file=None,
+        environment="test",
+        secret_key=SecretStr("s" * 32),
+        google_client_id="test-client-id",
+        google_client_secret=SecretStr("test-client-secret"),
+        owner_emails=frozenset({"dueno@example.com"}),
+    )
 
 
 @pytest.fixture
@@ -69,13 +84,37 @@ def session() -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(test_settings: Settings) -> Iterator[TestClient]:
-    """Cliente HTTP de una app de pruebas con las tablas creadas en su base en memoria."""
+def client(auth_app: FastAPI) -> Iterator[TestClient]:
+    """Cliente HTTP con la sesión del dueño iniciada (proveedor simulado, sin Google).
+
+    Las rutas de gestión exigen sesión (PED-15): así las pruebas del catálogo no cambian.
+    """
+    with TestClient(auth_app) as test_client:
+        log_in(test_client)
+        yield test_client
+
+
+@pytest.fixture
+def identity_provider() -> FakeIdentityProvider:
+    """Proveedor de identidad simulado; cada prueba ajusta su identidad o su falla."""
+    return FakeIdentityProvider()
+
+
+@pytest.fixture
+def auth_app(test_settings: Settings, identity_provider: FakeIdentityProvider) -> FastAPI:
+    """App de pruebas con tablas creadas y el proveedor de identidad simulado (sin Google)."""
     from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
 
     application = create_app(test_settings)
     SQLModel.metadata.create_all(application.state.engine)
-    with TestClient(application) as test_client:
+    application.dependency_overrides[get_identity_provider] = lambda: identity_provider
+    return application
+
+
+@pytest.fixture
+def anonymous_client(auth_app: FastAPI) -> Iterator[TestClient]:
+    """Cliente sin sesión sobre `auth_app`."""
+    with TestClient(auth_app) as test_client:
         yield test_client
 
 
@@ -90,4 +129,10 @@ def production_settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("SECRET_KEY", "x" * 32)
     monkeypatch.setenv("AI_PROVIDER", "fake")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    # Login con Google (PED-15): credenciales ficticias; ninguna prueba llama a Google.
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+    monkeypatch.setenv("OWNER_EMAILS", "dueno@example.com")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://pedidofacil-6nky.onrender.com")
+    monkeypatch.delenv("RENDER_EXTERNAL_URL", raising=False)
     return Settings(_env_file=None)

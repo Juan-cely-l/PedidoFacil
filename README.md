@@ -32,7 +32,37 @@ La app queda en http://127.0.0.1:8000 y la documentación de la API en `/docs`.
 | `local` | Desarrollo | SQLite en `./pedidofacil.db` | `fake` | Sí | Sí | DEBUG |
 | `production` | Render | PostgreSQL (Neon), obligatorio | `gemini` | Sí | No | INFO |
 
-En `production` la app no arranca si falta `DATABASE_URL` de PostgreSQL, `SECRET_KEY` (mínimo 32 caracteres) o, con `AI_PROVIDER=gemini`, `GEMINI_API_KEY`. Todas las variables están explicadas en `.env.example`.
+En `production` la app no arranca si falta alguna de estas variables:
+- `DATABASE_URL` de PostgreSQL;
+- `SECRET_KEY`, de mínimo 32 caracteres;
+- `GEMINI_API_KEY`, cuando `AI_PROVIDER=gemini`;
+- las variables del login con Google: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_EMAILS` y `PUBLIC_BASE_URL` con `https`.
+
+Todas las variables están explicadas en `.env.example`.
+
+### Login con Google en local
+
+La gestión (catálogo y lo que venga después) exige la sesión del dueño. Sin ella, cualquier ruta redirige a `/login`, salvo `/health`, `/health/live` y las rutas del propio login. El dueño entra con su cuenta de Google, y la app no guarda contraseñas.
+
+Para probar el login real en tu equipo:
+
+1. **Cliente OAuth:** crea uno en Google Cloud siguiendo [docs/despliegue.md](docs/despliegue.md#3-login-con-google-google-cloud). Necesitas la pantalla de consentimiento en modo Testing, tu correo como usuario de prueba y la URI `http://127.0.0.1:8000/auth/google/callback` registrada.
+2. **Variables en `.env`:**
+
+   ```bash
+   GOOGLE_CLIENT_ID=<id del cliente>.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=<secreto del cliente>
+   OWNER_EMAILS=tu-correo@gmail.com           # varios, separados por comas
+   PUBLIC_BASE_URL=http://127.0.0.1:8000      # opcional: es el valor por defecto en local
+   SECRET_KEY=<uv run python -c "import secrets; print(secrets.token_urlsafe(48))">
+   ```
+
+   Con `SECRET_KEY` fija, la sesión sobrevive a los reinicios de `fastapi dev`. Si falta, se genera una al azar en cada arranque y hay que volver a entrar.
+3. **El mismo host:** abre la app en el host de `PUBLIC_BASE_URL`, es decir, http://127.0.0.1:8000 y no `localhost:8000`. La cookie de sesión es de un host, y Google vuelve al host de `PUBLIC_BASE_URL`. Si son distintos, el login termina en «No se completó el inicio de sesión con Google». Para usar `localhost`, pon `PUBLIC_BASE_URL=http://localhost:8000` y registra también esa URI.
+
+Sin las variables de Google, la app arranca igual en local, pero «Entrar con Google» muestra un aviso de error.
+
+**Las pruebas no necesitan credenciales.** Usan un proveedor de identidad simulado y un Google falso en memoria, y nunca llaman a Google ni leen el `.env`.
 
 ### Health checks
 
@@ -68,5 +98,5 @@ Ver [docs/despliegue.md](docs/despliegue.md). Los logs y el rollback se completa
 
 ## Componentes reutilizados y uso de IA
 
-- Dependencias de terceros: ver `pyproject.toml` (FastAPI, Pydantic Settings, SQLModel, psycopg y herramientas de desarrollo: ruff, mypy, pytest, pre-commit). Cada una conserva su licencia.
+- Dependencias de terceros: ver `pyproject.toml` (FastAPI, Pydantic Settings, SQLModel, psycopg, Authlib e itsdangerous para el login con Google, y herramientas de desarrollo: ruff, mypy, pytest, time-machine, pre-commit). Cada una conserva su licencia.
 - Uso de IA en el desarrollo: la estructura inicial del repositorio y la configuración de calidad se generaron con ayuda de un asistente de IA (Claude) y fueron revisadas y adaptadas antes de integrarse.

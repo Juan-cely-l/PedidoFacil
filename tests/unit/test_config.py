@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from app.config import Settings, get_settings
 
@@ -56,6 +56,11 @@ VALID_SECRET_KEY = "k" * 32
 LEAKED_DB_URL = "sqlite:///clave-secreta-db.db"
 LEAKED_SHORT_VALUE = "clave-secreta-corta"
 LEAKED_LONG_VALUE = "clave-de-produccion-de-32-caracteres"
+VALID_GOOGLE_CLIENT_ID = "1234-abc.apps.googleusercontent.com"
+VALID_GOOGLE_CLIENT_SECRET = "secreto-de-google"  # noqa: S105  (valor ficticio de prueba)
+PRODUCTION_BASE_URL = "https://pedidofacil-6nky.onrender.com"
+# Valor reconocible para comprobar que el secreto nunca aparece en errores ni en repr().
+GOOGLE_SECRET_SENTINEL = "secreto-centinela"  # noqa: S105
 
 
 def _set_production_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None) -> None:
@@ -66,6 +71,12 @@ def _set_production_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None
         "SECRET_KEY": VALID_SECRET_KEY,
         "AI_PROVIDER": "fake",
         "GEMINI_API_KEY": None,
+        # Login con Google (PED-15).
+        "GOOGLE_CLIENT_ID": VALID_GOOGLE_CLIENT_ID,
+        "GOOGLE_CLIENT_SECRET": VALID_GOOGLE_CLIENT_SECRET,
+        "OWNER_EMAILS": "dueno@example.com",
+        "PUBLIC_BASE_URL": PRODUCTION_BASE_URL,
+        "RENDER_EXTERNAL_URL": None,
     }
     variables.update(overrides)
     for name, value in variables.items():
@@ -329,3 +340,134 @@ def test_un_log_level_explicito_se_respeta_en_todo_ambiente(
     _set_production_env(monkeypatch, ENVIRONMENT=environment, LOG_LEVEL="WARNING")
 
     assert Settings(_env_file=None).log_level == "WARNING"
+
+
+# Login con Google (PED-15, T002)
+
+
+def test_owner_emails_se_normalizan_y_descartan_los_vacios(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OWNER_EMAILS", " Dueno@Gmail.com , otro@x.co ,,")
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.owner_emails == frozenset({"dueno@gmail.com", "otro@x.co"})
+
+
+def test_sin_owner_emails_la_lista_queda_vacia_fuera_de_produccion() -> None:
+    settings = Settings(_env_file=None, environment="local")
+
+    assert settings.owner_emails == frozenset()
+
+
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [("local", "http://127.0.0.1:8000"), ("test", "http://testserver")],
+)
+def test_public_base_url_por_defecto_segun_el_ambiente(
+    environment: Literal["local", "test"], expected: str
+) -> None:
+    settings = Settings(_env_file=None, environment=environment)
+
+    assert settings.public_base_url == expected
+
+
+def test_public_base_url_explicita_se_respeta(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PUBLIC_BASE_URL", "http://localhost:8000")
+
+    settings = Settings(_env_file=None, environment="local")
+
+    assert settings.public_base_url == "http://localhost:8000"
+
+
+def test_produccion_sin_public_base_url_usa_la_url_que_define_render(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_production_env(monkeypatch, PUBLIC_BASE_URL=None, RENDER_EXTERNAL_URL=PRODUCTION_BASE_URL)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.public_base_url == PRODUCTION_BASE_URL
+
+
+def test_public_base_url_gana_a_la_url_de_render(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_production_env(monkeypatch, RENDER_EXTERNAL_URL="https://otra.onrender.com")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.public_base_url == PRODUCTION_BASE_URL
+
+
+@pytest.mark.parametrize(
+    "variable", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "OWNER_EMAILS", "PUBLIC_BASE_URL"]
+)
+def test_produccion_sin_variable_del_login_no_arranca(
+    monkeypatch: pytest.MonkeyPatch, variable: str
+) -> None:
+    message = _configuration_error(monkeypatch, **{variable: None})
+
+    assert variable in message
+
+
+def test_produccion_con_owner_emails_solo_comas_no_arranca(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    message = _configuration_error(monkeypatch, OWNER_EMAILS=" , ,")
+
+    assert "OWNER_EMAILS" in message
+
+
+def test_produccion_exige_public_base_url_con_https(monkeypatch: pytest.MonkeyPatch) -> None:
+    message = _configuration_error(
+        monkeypatch, PUBLIC_BASE_URL="http://pedidofacil-6nky.onrender.com"
+    )
+
+    assert "PUBLIC_BASE_URL" in message
+    assert "https://" in message
+
+
+def test_produccion_con_el_login_completo_arranca(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_production_env(monkeypatch)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.google_client_id == VALID_GOOGLE_CLIENT_ID
+    assert settings.owner_emails == frozenset({"dueno@example.com"})
+
+
+def test_el_error_no_muestra_el_secreto_de_google(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Falta OWNER_EMAILS para que haya error; el secreto presente no debe aparecer en él.
+    _set_production_env(monkeypatch, GOOGLE_CLIENT_SECRET=GOOGLE_SECRET_SENTINEL, OWNER_EMAILS=None)
+
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None)
+
+    assert GOOGLE_SECRET_SENTINEL not in str(error.value)
+
+
+def test_la_representacion_de_settings_oculta_el_secreto_de_google(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_production_env(monkeypatch, GOOGLE_CLIENT_SECRET=GOOGLE_SECRET_SENTINEL)
+
+    settings = Settings(_env_file=None)
+    secret = settings.google_client_secret
+
+    # Primero el tipo: si el campo se declarara como str, repr() lo mostraría tal cual.
+    assert isinstance(secret, SecretStr)
+    assert secret.get_secret_value() == GOOGLE_SECRET_SENTINEL
+    assert GOOGLE_SECRET_SENTINEL not in repr(settings)
+
+
+def test_la_uri_de_vuelta_de_google_sale_de_public_base_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    local = Settings(_env_file=None, environment="test")
+    _set_production_env(monkeypatch)
+    production = Settings(_env_file=None)
+
+    assert production.oauth_redirect_uri == (
+        "https://pedidofacil-6nky.onrender.com/auth/google/callback"
+    )
+    assert local.oauth_redirect_uri == "http://testserver/auth/google/callback"

@@ -3,14 +3,19 @@
 import os
 import secrets
 from functools import lru_cache
-from typing import Literal, Self
+from typing import Annotated, Literal, Self, cast
 
 from fastapi import Request
-from pydantic import Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from app.services.auth import normalize_email
 
 # Fuera de producción no hace falta definir DATABASE_URL: se usa SQLite.
 _DEFAULT_DATABASE_URLS = {"test": "sqlite://", "local": "sqlite:///./pedidofacil.db"}
+# Fuera de producción, la URL desde la que se abre la app (la URI de vuelta de Google sale de aquí).
+_DEFAULT_PUBLIC_BASE_URLS = {"test": "http://testserver", "local": "http://127.0.0.1:8000"}
+_OAUTH_CALLBACK_PATH = "/auth/google/callback"
 _POSTGRES_SCHEMES = ("postgresql", "postgres")
 _MIN_SECRET_KEY_LENGTH = 32
 _LOCAL_HINT = "Para desarrollo local copia .env.example a .env (ENVIRONMENT=local)"
@@ -38,12 +43,32 @@ class Settings(BaseSettings):
     secret_key: SecretStr | None = None
     ai_provider: Literal["fake", "gemini"] | None = None
     gemini_api_key: SecretStr | None = None
+    # Login del dueño con Google OAuth 2.0 / OpenID Connect (ADR 0003).
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
+    # Lista blanca: correos separados por comas en la variable; aquí, ya normalizados.
+    owner_emails: Annotated[frozenset[str], NoDecode] = frozenset()
+    # URL pública de la app; la URI de vuelta de Google sale de aquí.
+    public_base_url: str | None = None
+    # Render publica la URL del servicio: se usa si PUBLIC_BASE_URL no está definida.
+    render_external_url: str | None = Field(default=None, validation_alias="RENDER_EXTERNAL_URL")
+
+    @field_validator("owner_emails", mode="before")
+    @classmethod
+    def _parse_owner_emails(cls, value: object) -> object:
+        """Separa por comas, normaliza cada correo y descarta los vacíos."""
+        if isinstance(value, str):
+            emails = (normalize_email(email) for email in value.split(","))
+            return frozenset(email for email in emails if email)
+        return value
 
     @model_validator(mode="after")
     def _apply_environment_rules(self) -> Self:
         """Completa los valores por ambiente y, en producción, exige las variables obligatorias."""
         if self.log_level is None:
             self.log_level = "DEBUG" if self.environment == "local" else "INFO"
+        if self.public_base_url is None:
+            self.public_base_url = self.render_external_url
         if self.environment == "production":
             if self.ai_provider is None:
                 self.ai_provider = "gemini"
@@ -62,12 +87,21 @@ class Settings(BaseSettings):
         if self.secret_key is None:
             # Clave aleatoria por proceso: nunca un valor fijo escrito en el código.
             self.secret_key = SecretStr(secrets.token_urlsafe(48))
+        if self.public_base_url is None:
+            self.public_base_url = _DEFAULT_PUBLIC_BASE_URLS[self.environment]
         return self
 
     @property
     def docs_enabled(self) -> bool:
         """La documentación interactiva de la API solo se publica fuera de producción."""
         return self.environment != "production"
+
+    @property
+    def oauth_redirect_uri(self) -> str:
+        """URI a la que Google devuelve al dueño; debe estar registrada en Google Cloud."""
+        # Settings garantiza la URL tras validarse: obligatoria en producción, por defecto fuera.
+        base_url = cast(str, self.public_base_url).rstrip("/")
+        return f"{base_url}{_OAUTH_CALLBACK_PATH}"
 
     @property
     def short_commit(self) -> str:
@@ -87,6 +121,16 @@ class Settings(BaseSettings):
             problems.append(f"SECRET_KEY: debe tener al menos {_MIN_SECRET_KEY_LENGTH} caracteres")
         if self.ai_provider == "gemini" and self.gemini_api_key is None:
             problems.append("GEMINI_API_KEY: falta (obligatoria con AI_PROVIDER=gemini)")
+        if self.google_client_id is None:
+            problems.append("GOOGLE_CLIENT_ID: falta (ID del cliente OAuth de Google)")
+        if self.google_client_secret is None:
+            problems.append("GOOGLE_CLIENT_SECRET: falta (secreto del cliente OAuth de Google)")
+        if not self.owner_emails:
+            problems.append("OWNER_EMAILS: falta (al menos un correo autorizado a entrar)")
+        if self.public_base_url is None:
+            problems.append("PUBLIC_BASE_URL: falta (URL pública de la app, con https://)")
+        elif not self.public_base_url.startswith("https://"):
+            problems.append("PUBLIC_BASE_URL: debe empezar por https://")
         return problems
 
 

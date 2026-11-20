@@ -1,0 +1,464 @@
+"""Flujo de acceso del dueño con el proveedor de identidad simulado (nunca se llama a Google)."""
+
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime, timedelta
+from urllib.parse import parse_qs, urlsplit
+
+import httpx2  # el cliente HTTP de TestClient
+import pytest
+import time_machine
+from fastapi.testclient import TestClient
+from pydantic import SecretStr
+from sqlmodel import SQLModel
+
+from app.config import Settings
+from app.services.identity import LoginFailed, VerifiedIdentity, get_identity_provider
+from tests.doubles import (
+    SESSION_COOKIE,
+    TOKEN_SENTINEL,
+    ExplodingIdentityProvider,
+    FakeIdentityProvider,
+    log_in,
+    read_session,
+)
+
+SECRET_KEY = "s" * 32  # la misma de la fixture test_settings
+LOGIN_FAILED_MESSAGE = "No se pudo iniciar sesión con Google. Intenta de nuevo"
+NOT_AUTHORIZED_MESSAGE = "Esta cuenta de Google no tiene acceso a PedidoFácil"
+CANCELLED_MESSAGE = "No se completó el inicio de sesión con Google"
+LOGOUT_MESSAGE = "Cerraste sesión"
+INTRUDER = VerifiedIdentity(email="intruso@gmail.com", email_verified=True, name="Intruso")
+UNVERIFIED_OWNER = VerifiedIdentity(email="dueno@example.com", email_verified=False, name="Dueño")
+
+
+# Historia 1: entrar con la cuenta de Google (T009)
+
+
+def test_la_pagina_de_login_ofrece_entrar_con_google_y_no_pide_contrasena(
+    anonymous_client: TestClient,
+) -> None:
+    response = anonymous_client.get("/login")
+
+    assert response.status_code == 200
+    assert "Entrar con Google" in response.text
+    assert 'href="/login/google' in response.text
+    assert 'type="password"' not in response.text
+
+
+def test_entrar_lleva_a_la_pagina_que_se_queria_abrir(anonymous_client: TestClient) -> None:
+    callback = log_in(anonymous_client, next_path="/productos/7")
+
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/productos/7"
+
+
+def test_sin_destino_al_entrar_se_va_al_catalogo(anonymous_client: TestClient) -> None:
+    callback = log_in(anonymous_client)
+
+    assert callback.status_code == 303
+    assert callback.headers["location"] == "/productos"
+
+
+def test_un_destino_externo_se_ignora_y_se_va_al_catalogo(
+    anonymous_client: TestClient,
+) -> None:
+    callback = log_in(anonymous_client, next_path="//evil.com")
+
+    assert callback.headers["location"] == "/productos"
+
+
+def test_tras_entrar_la_navegacion_muestra_al_duenio(anonymous_client: TestClient) -> None:
+    log_in(anonymous_client)
+
+    response = anonymous_client.get("/productos")
+
+    assert response.status_code == 200
+    assert "Dueño" in response.text
+
+
+def test_con_sesion_la_pagina_de_login_lleva_al_catalogo(anonymous_client: TestClient) -> None:
+    log_in(anonymous_client)
+
+    response = anonymous_client.get("/login", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/productos"
+
+
+def test_la_sesion_guarda_solo_al_duenio_y_ningun_token(anonymous_client: TestClient) -> None:
+    log_in(anonymous_client)
+
+    session = read_session(anonymous_client, SECRET_KEY)
+
+    assert set(session) == {"owner"}
+    assert set(session["owner"]) == {"email", "name", "login_at"}
+    assert session["owner"]["email"] == "dueno@example.com"
+    assert TOKEN_SENTINEL not in str(session)
+
+
+# G1: login sin configurar en local (contracts/configuration.md)
+
+
+@pytest.fixture
+def unconfigured_client() -> Iterator[TestClient]:
+    """App local sin GOOGLE_CLIENT_ID. El proveedor explota si se usa: no se contacta a Google."""
+    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+
+    settings = Settings(
+        _env_file=None,
+        environment="local",
+        database_url=SecretStr("sqlite://"),
+        secret_key=SecretStr(SECRET_KEY),
+    )
+    assert settings.google_client_id is None
+    application = create_app(settings)
+    SQLModel.metadata.create_all(application.state.engine)
+    application.dependency_overrides[get_identity_provider] = ExplodingIdentityProvider
+    with TestClient(application) as client:
+        yield client
+
+
+def test_sin_configurar_google_en_local_el_login_muestra_un_aviso_de_error(
+    unconfigured_client: TestClient,
+) -> None:
+    response = unconfigured_client.get("/login/google", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?aviso=error"
+    page = unconfigured_client.get(response.headers["location"])
+    assert LOGIN_FAILED_MESSAGE in page.text
+    assert "owner" not in read_session(unconfigured_client, SECRET_KEY)
+
+
+# Historia 2: rechazar a quien no está autorizado (T018, contracts/auth-routes.md)
+
+
+def _identity_case(provider: FakeIdentityProvider, identity: VerifiedIdentity) -> None:
+    provider.identity = identity
+
+
+@pytest.mark.parametrize(
+    ("configure", "notice", "message"),
+    [
+        (lambda p: _identity_case(p, INTRUDER), "no_autorizado", NOT_AUTHORIZED_MESSAGE),
+        (lambda p: _identity_case(p, UNVERIFIED_OWNER), "no_autorizado", NOT_AUTHORIZED_MESSAGE),
+        (lambda p: setattr(p, "failure", LoginFailed("cancelado")), "cancelado", CANCELLED_MESSAGE),
+        (
+            lambda p: setattr(p, "failure", LoginFailed("state_invalido")),
+            "cancelado",
+            CANCELLED_MESSAGE,
+        ),
+        (lambda p: setattr(p, "failure", LoginFailed("red")), "error", LOGIN_FAILED_MESSAGE),
+        (
+            lambda p: setattr(p, "failure", LoginFailed("sin_id_token")),
+            "error",
+            LOGIN_FAILED_MESSAGE,
+        ),
+    ],
+    ids=[
+        "correo_fuera_de_la_lista",
+        "correo_no_verificado",
+        "cancelado_en_google",
+        "state_invalido",
+        "fallo_de_red",
+        "sin_id_token",
+    ],
+)
+def test_un_login_rechazado_vuelve_al_login_con_su_aviso_y_sin_sesion(
+    anonymous_client: TestClient,
+    identity_provider: FakeIdentityProvider,
+    configure: Callable[[FakeIdentityProvider], None],
+    notice: str,
+    message: str,
+) -> None:
+    configure(identity_provider)
+
+    callback = log_in(anonymous_client, next_path="/productos/7")
+
+    assert callback.status_code == 303
+    assert callback.headers["location"] == f"/login?aviso={notice}"
+    # La sesión queda vacía: ni dueño, ni destino pendiente, ni el estado temporal del login.
+    assert read_session(anonymous_client, SECRET_KEY) == {}
+    page = anonymous_client.get(callback.headers["location"], follow_redirects=False)
+    assert page.status_code == 200
+    assert message in page.text
+
+
+def test_un_login_rechazado_borra_tambien_una_sesion_anterior(
+    anonymous_client: TestClient, identity_provider: FakeIdentityProvider
+) -> None:
+    log_in(anonymous_client)
+    identity_provider.identity = INTRUDER
+
+    log_in(anonymous_client)
+
+    assert read_session(anonymous_client, SECRET_KEY) == {}
+
+
+@pytest.mark.parametrize("notice", ["<script>alert(1)</script>", "desconocido"])
+def test_un_aviso_desconocido_no_se_muestra_ni_se_refleja(
+    anonymous_client: TestClient, notice: str
+) -> None:
+    page = anonymous_client.get("/login", params={"aviso": notice})
+
+    assert page.status_code == 200
+    assert 'role="alert"' not in page.text
+    assert "alert(1)" not in page.text
+    assert "desconocido" not in page.text
+
+
+def test_los_rechazos_no_dejan_correos_ni_tokens_en_logs_ni_respuestas(
+    anonymous_client: TestClient,
+    identity_provider: FakeIdentityProvider,
+    app_log: pytest.LogCaptureFixture,
+) -> None:
+    identity_provider.identity = INTRUDER
+
+    callback = log_in(anonymous_client)
+    page = anonymous_client.get(callback.headers["location"])
+
+    assert "Inicio de sesión rechazado: no_autorizado" in app_log.text
+    for text in (app_log.text, callback.text, page.text):
+        assert "intruso@gmail.com" not in text
+        assert TOKEN_SENTINEL not in text
+
+
+# Historia 3: la gestión exige sesión (T025)
+
+
+def _login_redirect_next(location: str) -> str | None:
+    """Valida que la redirección vaya a /login y devuelve su parámetro next, si lo trae."""
+    parts = urlsplit(location)
+    assert parts.path == "/login"
+    values = parse_qs(parts.query).get("next")
+    return values[0] if values else None
+
+
+@pytest.mark.parametrize("path", ["/productos", "/productos/3", "/productos?inactivos=1"])
+def test_sin_sesion_una_pagina_de_gestion_redirige_al_login_recordando_el_destino(
+    anonymous_client: TestClient, path: str
+) -> None:
+    response = anonymous_client.get(path, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert _login_redirect_next(response.headers["location"]) == path
+
+
+def test_la_pagina_de_login_lleva_el_destino_hasta_google(anonymous_client: TestClient) -> None:
+    page = anonymous_client.get("/login", params={"next": "/productos/3"})
+
+    assert 'href="/login/google?next=%2Fproductos%2F3"' in page.text
+
+
+def test_tras_entrar_desde_una_pagina_protegida_se_vuelve_a_ella(
+    anonymous_client: TestClient,
+) -> None:
+    redirect = anonymous_client.get("/productos/3", follow_redirects=False)
+    destination = _login_redirect_next(redirect.headers["location"])
+
+    callback = log_in(anonymous_client, next_path=destination)
+
+    assert callback.headers["location"] == "/productos/3"
+
+
+def test_sin_sesion_un_formulario_no_guarda_nada(anonymous_client: TestClient) -> None:
+    data = {"name": "Producto fantasma", "description": "", "price": "5000"}
+
+    response = anonymous_client.post("/productos", data=data, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+    log_in(anonymous_client)
+    assert "Producto fantasma" not in anonymous_client.get("/productos").text
+
+
+@pytest.mark.parametrize("path", ["/health", "/health/live"])
+def test_sin_sesion_los_health_checks_siguen_respondiendo(
+    anonymous_client: TestClient, path: str
+) -> None:
+    response = anonymous_client.get(path, follow_redirects=False)
+
+    assert response.status_code == 200
+
+
+def test_tras_un_login_rechazado_la_gestion_sigue_cerrada(
+    anonymous_client: TestClient, identity_provider: FakeIdentityProvider
+) -> None:
+    # Movida desde T018: en US2 /productos todavía no exigía sesión.
+    identity_provider.identity = INTRUDER
+    log_in(anonymous_client)
+
+    response = anonymous_client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert _login_redirect_next(response.headers["location"]) == "/productos"
+
+
+def test_quitar_un_correo_de_la_lista_cierra_su_sesion_en_la_siguiente_peticion(
+    anonymous_client: TestClient, test_settings: Settings
+) -> None:
+    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+
+    log_in(anonymous_client)
+    # Mismo SECRET_KEY (la cookie sigue siendo válida), otra lista blanca: como tras un redeploy.
+    other_settings = test_settings.model_copy(
+        update={"owner_emails": frozenset({"otro@example.com"})}
+    )
+    restarted = create_app(other_settings)
+    SQLModel.metadata.create_all(restarted.state.engine)
+
+    with TestClient(restarted, cookies=dict(anonymous_client.cookies)) as client:
+        response = client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
+
+
+def test_una_cookie_de_sesion_alterada_lleva_al_login_sin_errores(
+    anonymous_client: TestClient,
+) -> None:
+    log_in(anonymous_client)
+    jar = anonymous_client.cookies.jar
+    (original,) = [cookie for cookie in jar if cookie.name == SESSION_COOKIE]
+    assert original.value is not None
+    value = original.value
+    tampered = value[:-2] + ("A" if value[-2] != "A" else "B") + value[-1]
+    # Reemplazarla en su mismo dominio y path: set() sin ellos agrega una segunda cookie y el
+    # cliente seguiría enviando la original.
+    anonymous_client.cookies.set(
+        SESSION_COOKIE, tampered, domain=original.domain, path=original.path
+    )
+    assert [cookie.value for cookie in jar if cookie.name == SESSION_COOKIE] == [tampered]
+
+    response = anonymous_client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
+
+
+# Historia 4: cerrar sesión y caducidad (T031, research.md R5 y R8)
+
+
+def _restarted_client(settings: Settings, cookies: dict[str, str]) -> TestClient:
+    """Una app nueva con la configuración dada y la cookie del cliente anterior (un reinicio)."""
+    from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
+
+    application = create_app(settings)
+    SQLModel.metadata.create_all(application.state.engine)
+    return TestClient(application, cookies=cookies)
+
+
+def _session_cookie_was_set(response: httpx2.Response) -> bool:
+    return any(
+        value.startswith(f"{SESSION_COOKIE}=") for value in response.headers.get_list("set-cookie")
+    )
+
+
+def test_cerrar_sesion_vacia_la_sesion_y_vuelve_al_login(anonymous_client: TestClient) -> None:
+    log_in(anonymous_client)
+
+    response = anonymous_client.post("/logout", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login?aviso=salida"
+    assert read_session(anonymous_client, SECRET_KEY) == {}
+    assert LOGOUT_MESSAGE in anonymous_client.get(response.headers["location"]).text
+    after = anonymous_client.get("/productos", follow_redirects=False)
+    assert after.status_code == 303
+    assert urlsplit(after.headers["location"]).path == "/login"
+
+
+def test_cerrar_sesion_por_get_no_esta_permitido_y_no_cierra_nada(
+    anonymous_client: TestClient,
+) -> None:
+    # Con SameSite=lax un GET desde otro sitio lleva la cookie: un enlace o una <img> no
+    # deben poder cerrar la sesión del dueño (CSRF de cierre de sesión).
+    log_in(anonymous_client)
+
+    response = anonymous_client.get("/logout", follow_redirects=False)
+
+    assert response.status_code == 405
+    assert anonymous_client.get("/productos", follow_redirects=False).status_code == 200
+
+
+def test_la_navegacion_ofrece_cerrar_sesion_con_un_formulario_post(
+    anonymous_client: TestClient,
+) -> None:
+    log_in(anonymous_client)
+
+    html = anonymous_client.get("/productos").text
+
+    assert '<form method="post" action="/logout">' in html
+    assert "Cerrar sesión" in html
+
+
+def test_la_sesion_sobrevive_a_un_reinicio_con_la_misma_secret_key(
+    anonymous_client: TestClient, test_settings: Settings
+) -> None:
+    log_in(anonymous_client)
+
+    with _restarted_client(test_settings, dict(anonymous_client.cookies)) as client:
+        response = client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 200
+
+
+def test_rotar_la_secret_key_invalida_todas_las_sesiones(
+    anonymous_client: TestClient, test_settings: Settings
+) -> None:
+    log_in(anonymous_client)
+    rotated = test_settings.model_copy(update={"secret_key": SecretStr("r" * 32)})
+
+    with _restarted_client(rotated, dict(anonymous_client.cookies)) as client:
+        response = client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
+
+
+def test_starlette_no_renueva_la_cookie_cuando_la_sesion_solo_se_lee(
+    anonymous_client: TestClient,
+) -> None:
+    """Guardia del comportamiento de Starlette 1.10 (research.md R5).
+
+    SessionMiddleware solo reenvía la cookie cuando la sesión se modifica: consultar páginas
+    no la renueva. Si una versión futura volviera a renovarla en cada respuesta, esta prueba
+    avisa de que la cookie pasó a ser deslizante.
+    """
+    t0 = datetime(2026, 11, 18, 8, 0, tzinfo=UTC)
+    with time_machine.travel(t0, tick=False) as traveller:
+        log_in(anonymous_client)
+
+        for hours in (2, 6, 11):
+            traveller.move_to(t0 + timedelta(hours=hours))
+            response = anonymous_client.get("/productos", follow_redirects=False)
+            assert response.status_code == 200, f"a las {hours} h"
+            assert not _session_cookie_was_set(response), f"a las {hours} h se renovó la cookie"
+
+
+def test_la_sesion_caduca_a_las_12_horas_del_login_aunque_se_renueve_la_cookie(
+    anonymous_client: TestClient,
+) -> None:
+    """Tope absoluto: 12 h desde login_at, aunque la cookie se haya renovado (research.md R5).
+
+    /login/google escribe en la sesión (login_next y el state del login), así que Starlette
+    renueva la cookie y su firma por 12 h más. Sin el tope, la cookie renovada a las 11 h
+    seguiría valiendo a las 12 h + 1 s y esta prueba fallaría.
+    """
+    t0 = datetime(2026, 11, 18, 8, 0, tzinfo=UTC)
+    with time_machine.travel(t0, tick=False) as traveller:
+        log_in(anonymous_client)
+        for hours in (2, 6):
+            traveller.move_to(t0 + timedelta(hours=hours))
+            assert anonymous_client.get("/productos", follow_redirects=False).status_code == 200
+
+        traveller.move_to(t0 + timedelta(hours=11))
+        renewal = anonymous_client.get("/login/google", follow_redirects=False)
+        assert _session_cookie_was_set(renewal), "a las 11 h /login/google no renovó la cookie"
+
+        traveller.move_to(t0 + timedelta(hours=12, seconds=1))
+        response = anonymous_client.get("/productos", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert urlsplit(response.headers["location"]).path == "/login"
+    assert read_session(anonymous_client, SECRET_KEY) == {}

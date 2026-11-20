@@ -9,9 +9,15 @@ from app.config import Settings
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
 # Las define la plataforma de despliegue, no quien configura la app.
-PLATFORM_VARIABLES = {"RENDER_GIT_COMMIT"}
+PLATFORM_VARIABLES = {"RENDER_GIT_COMMIT", "RENDER_EXTERNAL_URL"}
 # Nunca deben tener un valor activo en el ejemplo: o son secretos o dependen del ambiente.
-MUST_BE_COMMENTED = ("SECRET_KEY", "GEMINI_API_KEY", "DATABASE_URL", "LOG_LEVEL")
+MUST_BE_COMMENTED = (
+    "SECRET_KEY",
+    "GEMINI_API_KEY",
+    "DATABASE_URL",
+    "LOG_LEVEL",
+    "GOOGLE_CLIENT_SECRET",
+)
 
 
 def _settings_variables() -> list[str]:
