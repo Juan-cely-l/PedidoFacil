@@ -30,8 +30,8 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Instalar dependencias (exactamente las de uv.lock)
-        run: uv sync --locked
+      - name: Instalar dependencias (exactamente las de uv.lock, solo desde wheels)
+        run: uv sync --locked --no-build
 
       - name: Lint (ruff)
         run: uv run --no-sync ruff check --output-format=github .
