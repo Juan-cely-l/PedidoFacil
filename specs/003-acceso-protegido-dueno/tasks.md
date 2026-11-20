@@ -339,13 +339,13 @@ T030–T031 fallan por la razón esperada y esperar la aprobación del autor. Lu
 
 ## Fase 7: Pulido y temas transversales
 
-- [ ] T035 [P] Actualizar `docs/despliegue.md`:
+- [X] T035 [P] Actualizar `docs/despliegue.md`:
   - variables nuevas en la tabla de Render (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_EMAILS`, `PUBLIC_BASE_URL=https://pedidofacil-6nky.onrender.com`);
   - sección «Google Cloud», con la pantalla de consentimiento en modo Testing, el usuario de prueba y las URIs de research.md R10;
   - sección «Rotar `SECRET_KEY`» (R8: invalida todas las sesiones y los logins en curso);
   - en «Riesgos aceptados», marcar como cerrado el riesgo de `/productos` público y levantar el límite de HU-04.
-- [ ] T036 [P] Actualizar `README.md`: cómo configurar el login en local (`.env` con las variables de Google, abrir la app en el mismo host que `PUBLIC_BASE_URL`) y que las pruebas no necesitan credenciales.
-- [ ] T037 Ejecutar `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` y `uv run mypy`; confirmar cobertura ≥ 80 % con ramas y buscar `TOKEN-CENTINELA` en la salida completa de pytest (`-s`), donde no debe aparecer.
+- [X] T036 [P] Actualizar `README.md`: cómo configurar el login en local (`.env` con las variables de Google, abrir la app en el mismo host que `PUBLIC_BASE_URL`) y que las pruebas no necesitan credenciales.
+- [X] T037 Ejecutar `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` y `uv run mypy`; confirmar cobertura ≥ 80 % con ramas y buscar `TOKEN-CENTINELA` en la salida completa de pytest (`-s`), donde no debe aparecer.
 - [ ] T038 Validar a mano [quickstart.md](quickstart.md), recorrido local 1–7, con un cliente OAuth real de Google.
 - [ ] T039 Pasos manuales del autor **antes de integrar en `main`**: en Google Cloud, registrar `https://pedidofacil-6nky.onrender.com/auth/google/callback`; en Render, definir `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `OWNER_EMAILS` y `PUBLIC_BASE_URL`. Sin ellas, la app no arranca en producción, por diseño. **Después del merge**: verificar la sección «Producción» de quickstart.md.
 
