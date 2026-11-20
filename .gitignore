@@ -133,3 +133,9 @@ $RECYCLE.BIN/
 # OneDrive (el proyecto vive en una carpeta sincronizada)
 *.odlock
 ~$*
+
+# Herramientas locales de Neon (no forman parte del proyecto)
+.mcp.json
+skills-lock.json
+.claude/skills/neon/
+.claude/skills/neon-postgres/
