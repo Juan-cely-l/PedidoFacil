@@ -3,7 +3,7 @@
 La constitución (`.specify/memory/constitution.md`) prevalece sobre este archivo.
 
 ## Contexto
-- App que convierte el mensaje de un cliente en una cotización con precios e inventario reales, la envía por WhatsApp o Telegram y la convierte en pedido; incluye un bot de Telegram que atiende solo y alertas de stock bajo.
+- App que convierte el mensaje de un cliente en una cotización con los precios del catálogo, la envía por WhatsApp o Telegram y la convierte en pedido; incluye un bot de Telegram que atiende solo. Sin inventario ni compras (ADR 0004).
 - Proyecto académico individual, gestionado en Jira (proyecto `PED`). Entrega: 29 de noviembre de 2026.
 - El autor viene de Spring Boot: al explicar código, relaciónalo con su equivalente en Spring cuando ayude (Depends ↔ inyección de dependencias, Pydantic ↔ DTO + Bean Validation, Alembic ↔ Flyway, TestClient ↔ MockMvc).
 
@@ -21,7 +21,7 @@ La constitución (`.specify/memory/constitution.md`) prevalece sobre este archiv
 - IA: Pydantic AI con Gemini. En pruebas: `TestModel`/`FunctionModel` y `ALLOW_MODEL_REQUESTS=False`.
 - Telegram: Bot API con httpx y webhook en `app/routers/telegram.py`; en pruebas, `httpx.MockTransport`.
 - Envío desde la web: enlaces `wa.me` y `t.me/share`, sin API de WhatsApp.
-- Montos: enteros en pesos (nunca float); descuento de inventario dentro de una transacción.
+- Montos: enteros en pesos (nunca float).
 - Login: Google OAuth 2.0 con authlib sobre SessionMiddleware; sin contraseñas. Solo entran los correos de OWNER_EMAILS. En pruebas se sustituye el cliente OAuth y nunca se llama a Google.
 - Pruebas: `tests/unit` (servicios, sin HTTP) y `tests/integration` (endpoints con `TestClient`); fechas congeladas con `time-machine`.
 

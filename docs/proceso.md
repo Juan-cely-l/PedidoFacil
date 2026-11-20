@@ -50,4 +50,13 @@ Una historia está terminada cuando cumple todo lo siguiente:
 - **Tiempo de ciclo:** tiempo de cada historia entre «In Progress» y «Done», tomado de Jira.
 - **Ítems terminados por sprint:** Story Points completados, tomados del informe de velocidad.
 
-Regla de recorte acordada: si la velocidad del Sprint 1 es menor a 15 SP, las alertas de stock se entregan solo en el panel (HU-19) y el bot de Telegram solo cotiza, sin tomar el pedido (HU-20).
+### Regla de recorte (superada)
+
+Regla acordada al inicio: si la velocidad del Sprint 1 era menor a 15 SP, las alertas de stock se entregaban solo en el panel (HU-19) y el bot de Telegram solo cotizaba, sin tomar el pedido (HU-20).
+
+**Superada el 18/11/2026**, en la planificación del Sprint 2. La velocidad del Sprint 1 fue de 7 SP frente a 20 comprometidos, y el recorte resultó mayor que el previsto:
+
+- HU-18 (inventario y compras) y HU-19 (alertas de stock) **salen del alcance**. HU-19 no se entrega en forma reducida.
+- El bot de Telegram (HU-20) se mantiene completo, porque el dueño del producto lo declaró irrenunciable.
+
+La reemplazó el [ADR 0004](adr/0004-recorte-de-alcance-inventario.md), con la constitución 1.3.0. La decisión está registrada en los comentarios de PED-90 y PED-93 en Jira.

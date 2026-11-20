@@ -1,29 +1,43 @@
 <!--
 Informe de impacto de sincronización (Sync Impact Report)
-- Cambio de versión: 1.1.0 → 1.2.0 (MINOR: la autenticación del dueño pasa de contraseña local
-  a un proveedor de identidad externo; enmienda del 2026-11-18)
+- Cambio de versión: 1.2.0 → 1.3.0 (MINOR; enmienda del 2026-11-20)
+- Motivo: recorte de alcance. HU-18 (inventario y compras) y HU-19 (alertas de stock bajo)
+  salieron del backlog del proyecto en la planificación del Sprint 2, el 2026-11-18 (ADR 0004).
+- Por qué MINOR y no MAJOR: ningún principio se elimina ni se redefine; los siete conservan su
+  título, su propósito y su justificación. Lo que cambia es el alcance del producto: los puntos
+  retirados describían funcionalidad que salió del backlog y ya no tienen nada que regular. Por
+  analogía con las reglas de versionado, es un cambio material de la guía (MINOR), no una
+  redefinición (MAJOR) ni una corrección de redacción (PATCH).
+- Vacío en la gobernanza: las reglas de versionado no contemplan el caso de retirar una exigencia
+  de un principio que se conserva. MAJOR cubre eliminar o redefinir un principio; MINOR, agregar
+  o ampliar; PATCH, aclarar sin cambio semántico. Retirar una exigencia por recorte de alcance
+  no encaja en ninguna; aquí se clasifica como MINOR por la razón anterior. Queda pendiente
+  precisarlo en la sección de gobernanza en una enmienda futura.
+- Preámbulo: sin «disponibilidad del inventario», sin descuento de existencias al convertir en
+  pedido y sin alertas de stock bajo; se declara que la aplicación no lleva inventario.
 - Principios modificados (sin cambio de título):
-  - II. Pruebas deterministas y aisladas: las pruebas nunca llaman a Google; el cliente OAuth se
-    sustituye con app.dependency_overrides o httpx.MockTransport.
-  - IV. Stack fijo y simplicidad (YAGNI): autenticación con Google OAuth 2.0 (OpenID Connect) vía
-    authlib sobre SessionMiddleware; la app no guarda contraseñas; pwdlib sale del stack.
-  - VI. Seguridad y privacidad: lista blanca OWNER_EMAILS; cookie de sesión httponly, samesite=lax
-    y secure en producción; tokens de OAuth e id_token fuera de logs y mensajes de error.
+  - IV. Stack fijo y simplicidad (YAGNI): se retira «El descuento de inventario DEBE hacerse
+    dentro de una transacción».
+  - V. La IA asiste, el humano decide: se retira la exigencia de marcar los productos sin
+    unidades; el bot responde solo si reconoció todos los productos (sin condición de
+    disponibilidad); los pedidos del bot quedan «Por confirmar» sin mención al descuento de
+    inventario.
+  - VI. Seguridad y privacidad: el ejemplo de información interna ya no es el inventario.
 - Secciones añadidas: ninguna
 - Secciones eliminadas: ninguna
 - Plantillas dependientes: no se modifican en este comando (leen la constitución en tiempo de
-  ejecución).
-- TODO diferidos: ninguno
+  ejecución). CLAUDE.md se actualiza en el mismo commit.
+- TODO diferidos: precisar en la gobernanza cómo se versiona retirar una exigencia de un
+  principio que se conserva.
 -->
 
 # Constitución de PedidoFácil
 
 PedidoFácil es una aplicación web que atiende los pedidos de un emprendimiento desde el primer
 mensaje del cliente. Una IA identifica los productos que pide el cliente; la aplicación arma la
-cotización con los precios y la disponibilidad del inventario, la envía por WhatsApp o Telegram
-y, cuando el cliente acepta, la convierte en pedido y descuenta el inventario. Un bot de Telegram
-atiende únicamente a los clientes y la aplicación alerta al dueño cuando el stock de un producto
-está bajo. No existe página pública de seguimiento. Es un proyecto académico individual
+cotización con los precios del catálogo, la envía por WhatsApp o Telegram y, cuando el cliente
+acepta, la convierte en pedido. Un bot de Telegram atiende únicamente a los clientes. La
+aplicación no lleva inventario ni registra compras. No existe página pública de seguimiento. Es un proyecto académico individual
 (Ingeniería de Software), gestionado con Scrum en Jira (proyecto PED), con entrega final el
 2026-11-29.
 
@@ -82,7 +96,6 @@ proyecto individual no tiene.
 - Envío de cotizaciones desde la web por WhatsApp y Telegram con enlaces `wa.me` y
   `t.me/share`; la API oficial de WhatsApp queda fuera del alcance.
 - Los montos DEBEN guardarse como enteros en pesos colombianos (COP), nunca como `float`.
-- El descuento de inventario DEBE hacerse dentro de una transacción.
 - Autenticación del dueño con Google OAuth 2.0 (OpenID Connect) mediante `authlib`, sobre el
   `SessionMiddleware` de Starlette. La aplicación NO DEBE guardar contraseñas.
 - Despliegue en Render con su runtime nativo de Python y uv.
@@ -98,12 +111,11 @@ proyecto entregable en el plazo.
 
 - La IA identifica productos, variantes y cantidades, pero NUNCA DEBE fijar precios: los totales
   los calcula el código a partir del catálogo.
-- Los productos no reconocidos o sin unidades DEBEN quedar marcados; NUNCA DEBEN inventarse
-  datos.
-- El bot solo DEBE responder por su cuenta si reconoció todos los productos y hay
-  disponibilidad; en cualquier otro caso avisa al cliente y notifica al dueño.
-- Los pedidos creados por el bot DEBEN quedar en estado «Por confirmar» y NO DEBEN descontar
-  inventario hasta que el dueño los confirme.
+- Los productos no reconocidos DEBEN quedar marcados; NUNCA DEBEN inventarse datos.
+- El bot solo DEBE responder por su cuenta si reconoció todos los productos; en cualquier otro
+  caso avisa al cliente y notifica al dueño.
+- Los pedidos creados por el bot DEBEN quedar en estado «Por confirmar» hasta que el dueño los
+  confirme.
 - DEBE existir siempre un respaldo manual cuando la IA falla, tarda más de 15 s o devuelve datos
   inválidos.
 
@@ -119,7 +131,7 @@ responsabilidad en el humano mientras la IA ahorra tiempo.
   las peticiones que no la incluyan o no coincidan.
 - El token del bot DEBE vivir solo en variables de entorno.
 - Los mensajes enviados a clientes NO DEBEN incluir datos de otros clientes ni información
-  interna, como el inventario.
+  interna del negocio.
 - Los logs NO DEBEN contener datos personales ni claves.
 - El acceso DEBE restringirse con una lista blanca de correos autorizados (`OWNER_EMAILS`):
   autenticarse con Google no basta para entrar.
@@ -170,4 +182,4 @@ commit.
   DEBE justificarse en la sección de complejidad (Complexity Tracking) de `plan.md`.
 - La guía operativa para el agente de desarrollo está en `CLAUDE.md`.
 
-**Versión**: 1.2.0 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-18
+**Versión**: 1.3.0 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-20
