@@ -293,6 +293,10 @@ una línea «Por revisar» eligiendo un producto, eliminar otra y verificar subt
   centinela en las pruebas.
 - **SC-007**: Corregir una línea (cantidad, producto o variante) recalcula el total sin recargar a
   mano y sin que el dueño haga cuentas.
+- **SC-008**: Con el banco de mensajes de prueba (al menos 12, escritos como se escribe por
+  WhatsApp), al menos el 80 % de los productos, variantes y cantidades esperados sale correcto.
+  Es una meta a validar con el proveedor real, fuera de las pruebas automáticas, porque estas no
+  llaman a la IA.
 
 ## Supuestos
 
