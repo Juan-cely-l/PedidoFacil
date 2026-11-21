@@ -10,7 +10,7 @@ hay errores, se vuelve a mostrar la página con lo escrito y un mensaje en espa�
 | `GET /cotizaciones` | Lista de cotizaciones de la más reciente a la más antigua, con fecha de creación, estado, total, pendientes («2 por revisar») y enlace al detalle (FR-016). Sin cotizaciones: «Aún no hay cotizaciones» y un enlace a «Nueva cotización». | 200 |
 | `GET /cotizaciones/nueva` | Formulario con un `<textarea name="message">` (máx. 2000) y el botón «Cotizar». Si no hay nada cotizable, en lugar del formulario aparece «Primero crea productos en el catálogo» con un enlace a `/productos/nuevo`. | 200 |
 | `POST /cotizaciones` | Cotiza el mensaje (`quote_message`) y guarda el borrador, con o sin IA. | 303 → `/cotizaciones/{id}`; 422 si el mensaje está vacío o es demasiado largo (no llama a la IA); 409 si no hay nada cotizable (no llama a la IA) |
-| `GET /cotizaciones/{id}` | Detalle (ver abajo). | 200; 404 si no existe |
+| `GET /cotizaciones/{id}` | Detalle (ver abajo). | 200; 404 con `{"detail": "La cotización no existe"}`, que distingue el dominio de una ruta inexistente |
 | `POST /cotizaciones/{id}/lineas` | Agrega una línea: `item` y `quantity`. | 303 → detalle; 422 si hay errores; 404 |
 | `POST /cotizaciones/{id}/lineas/{line_id}` | Cambia `item` y/o `quantity` de una línea; con `item` válido, resuelve una línea «Por revisar». | 303; 422; 404 si la línea no es de esa cotización |
 | `POST /cotizaciones/{id}/lineas/{line_id}/eliminar` | Elimina la línea. | 303; 404 |

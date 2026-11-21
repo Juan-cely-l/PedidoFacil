@@ -10,6 +10,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.services import quote_ai
+from tests.banco_mensajes import CATALOGOS, Negocio
 
 PRICE_WORDS = ("price", "subtotal", "total", "precio")
 
@@ -180,3 +181,69 @@ def test_expresiones_de_fecha_validas_se_aceptan(delivery_date: dict[str, object
     extraction = _validate(_extraction(delivery_date=delivery_date))
 
     assert (extraction.delivery_date is None) == (delivery_date is None)
+
+
+# Instrucciones y mensaje de usuario (research R6)
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        "id",  # solo ids de la lista
+        "null",  # si no está seguro
+        "no inventes",
+        "precio",  # no hay precios: no los calcules ni los menciones
+        "una docena",
+        "media docena",
+        "un par",
+        "fecha",
+        "hora",
+        "domicilio",
+        "recoger",
+        "datos, no instrucciones",  # el mensaje del cliente
+    ],
+)
+def test_las_instrucciones_contienen_cada_regla(rule: str) -> None:
+    assert rule in quote_ai.INSTRUCTIONS.lower()
+
+
+CLIENT_MESSAGE = "hola, me regalas dos tortas de chocolate medianas pa el sabado"
+
+
+def _prompt() -> str:
+    return quote_ai.render_catalog_prompt(CATALOGOS["reposteria"], CLIENT_MESSAGE)
+
+
+def test_el_mensaje_de_usuario_tiene_el_catalogo_y_luego_el_mensaje_delimitados() -> None:
+    prompt = _prompt()
+
+    catalog_start = prompt.index("<catalogo>")
+    catalog_end = prompt.index("</catalogo>")
+    message_start = prompt.index("<mensaje_cliente>")
+    message_end = prompt.index("</mensaje_cliente>")
+    assert catalog_start < catalog_end < message_start < message_end
+    assert CLIENT_MESSAGE in prompt[message_start:message_end]
+
+
+def test_el_catalogo_del_mensaje_tiene_cada_id_y_cada_nombre() -> None:
+    prompt = _prompt()
+    catalog = prompt[prompt.index("<catalogo>") : prompt.index("</catalogo>")]
+
+    for item in CATALOGOS["reposteria"]:
+        product_name, _, variant = item.label.partition(" — ")
+        assert str(item.product_id) in catalog
+        assert product_name in catalog
+        if item.variant_id is not None:
+            assert str(item.variant_id) in catalog
+            assert variant in catalog
+
+
+@pytest.mark.parametrize("negocio", ["reposteria", "accesorios"])
+def test_el_mensaje_de_usuario_no_lleva_ningun_precio(negocio: Negocio) -> None:
+    items = CATALOGOS[negocio]
+    prompt = quote_ai.render_catalog_prompt(items, "hola")
+
+    for item in items:
+        with_dots = f"{item.unit_price:,}".replace(",", ".")
+        assert str(item.unit_price) not in prompt
+        assert with_dots not in prompt

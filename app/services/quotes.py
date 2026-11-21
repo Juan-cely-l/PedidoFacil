@@ -5,9 +5,15 @@ La IA interpreta y el código calcula (principio V): los precios salen solo de
 la ruta web y el webhook de Telegram (HU-20) llamen a las mismas funciones (RD-1, research R8).
 """
 
-from pydantic import BaseModel
+import datetime
 
-from app.models.quote import LineStatus, ReviewReason
+from pydantic import BaseModel
+from pydantic_ai import Agent
+from sqlmodel import Session
+
+from app.models.catalog import QuotableItem
+from app.models.quote import LineStatus, Quote, ReviewReason
+from app.services.quote_ai import QuoteExtraction
 
 
 class LineDraft(BaseModel):
@@ -26,3 +32,57 @@ class LineDraft(BaseModel):
     review_reason: ReviewReason | None
     label: str | None
     unit_price: int | None
+
+
+class EmptyMessageError(Exception):
+    """El mensaje está vacío o solo tiene espacios: no se llama a la IA."""
+
+
+class MessageTooLongError(Exception):
+    """El mensaje supera el máximo de caracteres: no se llama a la IA."""
+
+
+class NothingToQuoteError(Exception):
+    """No hay nada cotizable en el catálogo: no se llama a la IA."""
+
+
+class QuoteNotFoundError(Exception):
+    """La cotización no existe."""
+
+
+def build_lines(extraction: QuoteExtraction, items: list[QuotableItem]) -> list[LineDraft]:
+    """Convierte la extracción en líneas, con precios del catálogo (research.md R5)."""
+    raise NotImplementedError
+
+
+async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan para las pruebas)
+    session: Session,
+    message: str,
+    *,
+    extractor: Agent[None, QuoteExtraction] | None,
+    timeout_seconds: float,
+    today: datetime.date,
+    now: datetime.datetime,
+) -> Quote:
+    """Cotiza el mensaje y guarda el borrador (contracts/quote-service.md)."""
+    raise NotImplementedError
+
+
+def get_quote(session: Session, quote_id: int) -> Quote:
+    """Devuelve la cotización con sus líneas."""
+    raise NotImplementedError
+
+
+def list_quotes(session: Session) -> list[Quote]:
+    """Cotizaciones de la más reciente a la más antigua."""
+    raise NotImplementedError
+
+
+def quote_total(quote: Quote) -> int:
+    """Suma, en pesos enteros, los subtotales de las líneas listas."""
+    raise NotImplementedError
+
+
+def pending_count(quote: Quote) -> int:
+    """Número de líneas «Por revisar»."""
+    raise NotImplementedError

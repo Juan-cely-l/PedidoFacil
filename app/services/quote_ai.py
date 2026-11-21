@@ -9,6 +9,9 @@ import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic_ai import Agent
+
+from app.models.catalog import QuotableItem
 
 MAX_LINES = 30
 
@@ -58,3 +61,35 @@ class QuoteExtraction(_AiOutput):
     )
     delivery_mode: Literal["domicilio", "recoger"] | None = None
     delivery_address: str | None = Field(default=None, max_length=200)
+
+
+INSTRUCTIONS = ""
+
+
+def render_catalog_prompt(items: list[QuotableItem], message: str) -> str:
+    """Arma el mensaje de usuario: `<catalogo>` sin precios y `<mensaje_cliente>` (R6)."""
+    raise NotImplementedError
+
+
+def resolve_delivery_date(
+    expr: DateExpression | None, today: datetime.date
+) -> tuple[datetime.date | None, bool]:
+    """Convierte la expresión de fecha en una fecha y una marca de revisión (R7)."""
+    raise NotImplementedError
+
+
+def resolve_delivery_time(expr: str | None) -> tuple[datetime.time | None, bool]:
+    """Normaliza la expresión de hora en una hora y una marca de revisión (R7b)."""
+    raise NotImplementedError
+
+
+def build_quote_agent(
+    *,
+    provider: Literal["fake", "gemini"],
+    api_key: str | None,
+    model_name: str,
+    fallback_model_name: str | None,
+    timeout_seconds: float,
+) -> Agent[None, QuoteExtraction] | None:
+    """Construye el agente de cotización; `None` si la IA está desactivada (R12)."""
+    raise NotImplementedError

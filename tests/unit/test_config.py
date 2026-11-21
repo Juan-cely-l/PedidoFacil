@@ -550,3 +550,21 @@ def test_el_tiempo_de_espera_dentro_del_tope_se_acepta(
     settings = Settings(_env_file=None, environment="test")
 
     assert settings.ai_timeout_seconds == expected
+
+
+# Cobertura de ramas ya existentes de app/config.py (T010): no es comportamiento nuevo.
+
+
+def test_un_respaldo_none_explicito_queda_sin_respaldo() -> None:
+    settings = Settings(_env_file=None, environment="test", gemini_fallback_model=None)
+
+    assert settings.gemini_fallback_model is None
+
+
+def test_un_respaldo_en_blanco_impide_arrancar(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "   ")
+
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, environment="test")
+
+    assert "GEMINI_FALLBACK_MODEL" in str(error.value)
