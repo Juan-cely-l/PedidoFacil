@@ -38,14 +38,14 @@ def _extraction(**overrides: object) -> dict[str, object]:
 
 
 def _validate(payload: dict[str, object]) -> Any:
-    return quote_ai.QuoteExtraction.model_validate(payload)  # type: ignore[attr-defined]
+    return quote_ai.QuoteExtraction.model_validate(payload)
 
 
 def _schema_models() -> list[type[BaseModel]]:
     return [
-        quote_ai.QuoteExtraction,  # type: ignore[attr-defined]
-        quote_ai.ExtractedLine,  # type: ignore[attr-defined]
-        quote_ai.DateExpression,  # type: ignore[attr-defined]
+        quote_ai.QuoteExtraction,
+        quote_ai.ExtractedLine,
+        quote_ai.DateExpression,
     ]
 
 

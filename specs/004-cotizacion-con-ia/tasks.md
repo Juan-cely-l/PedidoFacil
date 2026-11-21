@@ -93,9 +93,9 @@ servicio.
 
 - [x] T003 [P] Ampliar `tests/unit/test_config.py`, según contracts/configuration.md:
   - **Valores por defecto**: `gemini_model == "gemini-3.5-flash-lite"`, `gemini_fallback_model == "gemini-3.8-flash"`, `ai_timeout_seconds == 10`.
-  - **Respaldo desactivado**: `GEMINI_FALLBACK_MODEL=""` da `gemini_fallback_model is None`.
+  - **Respaldo desactivado**: `GEMINI_FALLBACK_MODEL=ninguno` (sin importar mayúsculas ni espacios) da `gemini_fallback_model is None`; vacía cuenta como ausente y da el valor por defecto (convención `env_ignore_empty`; cambio aprobado por el autor en el verde).
   - **Respaldo igual al principal**: `GEMINI_MODEL="x"` y `GEMINI_FALLBACK_MODEL="x"` lanza `ValidationError` que nombra `GEMINI_FALLBACK_MODEL`.
-  - **Modelo vacío**: `GEMINI_MODEL=""` lanza `ValidationError`.
+  - **Modelo en blanco**: `GEMINI_MODEL="   "` lanza `ValidationError`.
   - **Tope del principio V**: `AI_TIMEOUT_SECONDS` igual a `0`, `-1` o `15.01` lanza `ValidationError` en `local`, `test` y `production`; `15` y `0.5` se aceptan.
   - **`.env.example`**: ampliar `tests/unit/test_env_example.py` solo si no recorre los campos de `Settings` por sí sola; si los recorre, las tres variables nuevas quedan cubiertas sin cambiarla.
 - [x] T004 [P] Prueba en `tests/unit/test_model_requests_off.py` (nuevo), research R10:
@@ -127,12 +127,12 @@ cotización`.
 
 ### Implementación de los fundamentos (verde)
 
-- [ ] T010 [P] Ampliar `Settings` en `app/config.py` con `gemini_model: str = "gemini-3.5-flash-lite"` (no vacío), `gemini_fallback_model: str | None = "gemini-3.8-flash"` (vacío → `None`; distinto de `gemini_model`) y `ai_timeout_seconds: float = 10` (`Field(gt=0, le=15)`). Documentar las tres variables en `.env.example`, con la nota de que se cambian según la medición de research R2.
-- [ ] T011 [P] En `tests/conftest.py` (ampliar), fijar `pydantic_ai.models.ALLOW_MODEL_REQUESTS = False` al importarse, con un comentario que cite el principio II.
-- [ ] T012 [P] En `app/services/quote_ai.py`, los modelos `QuoteExtraction`, `ExtractedLine` y `DateExpression` exactamente como en data-model.md, con `model_config = ConfigDict(extra="forbid")` y sin ningún campo de precio.
-- [ ] T013 [P] En `app/services/quotes.py`, el modelo `LineDraft` de data-model.md (`customer_text`, `product_id`, `variant_id`, `quantity`, `quantity_assumed`, `status`, `review_reason`, `label`, `unit_price`), y en `tests/banco_mensajes.py` la función `puntuar` con la regla de research R14 (retirar el `# type: ignore` de T002).
-- [ ] T014 Crear `app/models/quote.py` con las tablas `Quote` y `QuoteLine` y sus restricciones exactas de data-model.md (`CHECK`, `ON DELETE CASCADE`, `RESTRICT`, índice por `created_at`), más las enumeraciones de estado, resultado de la IA y motivo. Registrarlas donde Alembic descubre los modelos y generar `migrations/versions/20261121_<rev>_crear_tablas_de_cotizaciones.py` con `uv run alembic revision --autogenerate -m "crear tablas de cotizaciones"`; revisar a mano que los `CHECK` y las acciones de las claves foráneas queden en la migración.
-- [ ] T015 Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): configuración del modelo, esquema sin precios y tablas de cotización`.
+- [x] T010 [P] Ampliar `Settings` en `app/config.py` con `gemini_model: str = "gemini-3.5-flash-lite"` (no vacío), `gemini_fallback_model: str | None = "gemini-3.8-flash"` (`ninguno` → `None`; distinto de `gemini_model`) y `ai_timeout_seconds: float = 10` (`Field(gt=0, le=15)`). Documentar las tres variables en `.env.example`, con la nota de que se cambian según la medición de research R2.
+- [x] T011 [P] En `tests/conftest.py` (ampliar), fijar `pydantic_ai.models.ALLOW_MODEL_REQUESTS = False` al importarse, con un comentario que cite el principio II.
+- [x] T012 [P] En `app/services/quote_ai.py`, los modelos `QuoteExtraction`, `ExtractedLine` y `DateExpression` exactamente como en data-model.md, con `model_config = ConfigDict(extra="forbid")` y sin ningún campo de precio.
+- [x] T013 [P] En `app/services/quotes.py`, el modelo `LineDraft` de data-model.md (`customer_text`, `product_id`, `variant_id`, `quantity`, `quantity_assumed`, `status`, `review_reason`, `label`, `unit_price`), y en `tests/banco_mensajes.py` la función `puntuar` con la regla de research R14 (retirar el `# type: ignore` de T002).
+- [x] T014 Crear `app/models/quote.py` con las tablas `Quote` y `QuoteLine` y sus restricciones exactas de data-model.md (`CHECK`, `ON DELETE CASCADE`, `RESTRICT`, índice por `created_at`), más las enumeraciones de estado, resultado de la IA y motivo. Registrarlas donde Alembic descubre los modelos y generar `migrations/versions/20261121_<rev>_crear_tablas_de_cotizaciones.py` con `uv run alembic revision --autogenerate -m "crear tablas de cotizaciones"`; revisar a mano que los `CHECK` y las acciones de las claves foráneas queden en la migración.
+- [x] T015 Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): configuración del modelo, esquema sin precios y tablas de cotización`.
 
 **Punto de control**: la base para cotizar existe; ninguna prueba puede llamar a Gemini.
 

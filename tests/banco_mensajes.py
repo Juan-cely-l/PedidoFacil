@@ -36,12 +36,10 @@ IA ni del mensaje. Las pruebas verifican aparte que cada línea «Lista» lleva 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 from app.models.catalog import QuotableItem
-
-if TYPE_CHECKING:
-    from app.services.quotes import LineDraft  # type: ignore[attr-defined]
+from app.services.quotes import LineDraft
 
 Negocio = Literal["reposteria", "accesorios"]
 Origen = Literal["E01", "E02", "inventado"]
@@ -307,6 +305,26 @@ MENSAJES: tuple[CasoBanco, ...] = (
 )
 
 
+def _acierta(item: ItemEsperado, linea: LineDraft) -> bool:
+    """Una línea acierta un ítem si coinciden estado, producto, variante y, si importa, cantidad."""
+    return (
+        linea.status == item.status
+        and linea.product_id == item.product_id
+        and linea.variant_id == item.variant_id
+        and (item.quantity is None or linea.quantity == item.quantity)
+    )
+
+
 def puntuar(esperado: tuple[ItemEsperado, ...], lineas: list[LineDraft]) -> Acierto:
-    """Compara las líneas producidas con lo esperado, con la regla del docstring del módulo."""
-    raise NotImplementedError
+    """Compara las líneas producidas con lo esperado, con la regla del docstring del módulo.
+
+    Cada línea acierta como mucho un ítem; las que no aciertan ninguno son sobrantes.
+    """
+    libres = list(lineas)
+    correctos = 0
+    for item in esperado:
+        linea = next((linea for linea in libres if _acierta(item, linea)), None)
+        if linea is not None:
+            libres.remove(linea)
+            correctos += 1
+    return Acierto(esperados=len(esperado), correctos=correctos, sobrantes=len(libres))

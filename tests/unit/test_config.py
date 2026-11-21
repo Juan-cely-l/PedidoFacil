@@ -479,17 +479,27 @@ def test_la_uri_de_vuelta_de_google_sale_de_public_base_url(
 def test_el_modelo_el_respaldo_y_el_tiempo_de_espera_tienen_valores_por_defecto() -> None:
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.gemini_model == "gemini-3.5-flash-lite"  # type: ignore[attr-defined]
-    assert settings.gemini_fallback_model == "gemini-3.8-flash"  # type: ignore[attr-defined]
-    assert settings.ai_timeout_seconds == 10  # type: ignore[attr-defined]
+    assert settings.gemini_model == "gemini-3.5-flash-lite"
+    assert settings.gemini_fallback_model == "gemini-3.8-flash"
+    assert settings.ai_timeout_seconds == 10
 
 
-def test_un_respaldo_vacio_desactiva_el_respaldo(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("value", ["ninguno", " Ninguno "])
+def test_el_respaldo_se_desactiva_con_ninguno(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", value)
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.gemini_fallback_model is None
+
+
+def test_un_respaldo_vacio_cuenta_como_ausente(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Convención del proyecto (env_ignore_empty): una variable vacía toma el valor por defecto.
     monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "")
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.gemini_fallback_model is None  # type: ignore[attr-defined]
+    assert settings.gemini_fallback_model == "gemini-3.8-flash"
 
 
 def test_el_respaldo_no_puede_ser_el_mismo_modelo(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -502,8 +512,9 @@ def test_el_respaldo_no_puede_ser_el_mismo_modelo(monkeypatch: pytest.MonkeyPatc
     assert "GEMINI_FALLBACK_MODEL" in str(error.value)
 
 
-def test_el_modelo_no_puede_quedar_vacio(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GEMINI_MODEL", "")
+def test_el_modelo_no_puede_quedar_en_blanco(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Vacío cuenta como ausente (valor por defecto); solo espacios sí llega a la validación.
+    monkeypatch.setenv("GEMINI_MODEL", "   ")
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None, environment="test")
@@ -538,4 +549,4 @@ def test_el_tiempo_de_espera_dentro_del_tope_se_acepta(
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.ai_timeout_seconds == expected  # type: ignore[attr-defined]
+    assert settings.ai_timeout_seconds == expected

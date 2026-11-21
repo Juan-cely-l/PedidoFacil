@@ -11,12 +11,28 @@ from app.models.catalog import (
     VariantInput,
     VariantKind,
 )
+from app.models.quote import (
+    AiOutcome,
+    DeliveryMode,
+    LineStatus,
+    Quote,
+    QuoteLine,
+    QuoteStatus,
+    ReviewReason,
+)
 
 __all__ = [
+    "AiOutcome",
+    "DeliveryMode",
+    "LineStatus",
     "Product",
     "ProductInput",
     "ProductVariant",
     "QuotableItem",
+    "Quote",
+    "QuoteLine",
+    "QuoteStatus",
+    "ReviewReason",
     "VariantInput",
     "VariantKind",
 ]

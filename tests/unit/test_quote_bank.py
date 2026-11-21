@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from app.models.quote import LineStatus, ReviewReason
 from app.services import quotes
 from tests.banco_mensajes import (
     CATALOGOS,
@@ -87,14 +88,14 @@ def _linea(
     review_reason: str | None = None,
 ) -> Any:
     lista = status == "lista"
-    return quotes.LineDraft(  # type: ignore[attr-defined]
+    return quotes.LineDraft(
         customer_text="texto del cliente",
         product_id=product_id,
         variant_id=variant_id,
         quantity=quantity,
         quantity_assumed=False,
-        status=status,
-        review_reason=review_reason,
+        status=LineStatus(status),
+        review_reason=ReviewReason(review_reason) if review_reason else None,
         label="Etiqueta" if lista else None,
         unit_price=1000 if lista else None,
     )
