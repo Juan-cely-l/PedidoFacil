@@ -2,7 +2,7 @@
 
 import logging
 import sys
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import Depends, FastAPI
 from pydantic import SecretStr
@@ -20,6 +20,7 @@ from app.security import (
     require_owner,
 )
 from app.services.identity import GoogleIdentityProvider
+from app.services.quote_ai import build_quote_agent
 
 LOGGER_NAME = "pedidofacil"
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -73,6 +74,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     database_url = cast(SecretStr, settings.database_url).get_secret_value()
     application.state.engine = build_engine(database_url)
     application.state.identity_provider = GoogleIdentityProvider(settings)
+    # Agente de cotización (PED-16): None con AI_PROVIDER=fake. Construirlo no abre conexiones.
+    api_key = settings.gemini_api_key.get_secret_value() if settings.gemini_api_key else None
+    application.state.quote_extractor = build_quote_agent(
+        provider=cast(Literal["fake", "gemini"], settings.ai_provider),
+        api_key=api_key,
+        model_name=settings.gemini_model,
+        fallback_model_name=settings.gemini_fallback_model,
+        timeout_seconds=settings.ai_timeout_seconds,
+    )
     # Sesión del dueño en una cookie firmada con SECRET_KEY (research.md R5). Starlette la marca
     # siempre HttpOnly; Secure solo en producción, donde la app se sirve por https.
     application.add_middleware(
@@ -95,6 +105,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
     logger.info(
         "Aplicación iniciada (entorno=%s, commit=%s)", settings.environment, settings.git_commit
+    )
+    # Los nombres de los modelos no son secretos; la clave nunca se registra.
+    logger.info(
+        "Cotización con IA: proveedor=%s, modelo=%s, respaldo=%s, tiempo de espera=%s s",
+        settings.ai_provider,
+        settings.gemini_model,
+        settings.gemini_fallback_model or "ninguno",
+        settings.ai_timeout_seconds,
     )
     return application
 

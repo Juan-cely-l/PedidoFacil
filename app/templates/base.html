@@ -16,6 +16,7 @@
       {% set owner = request.session.get("owner") if request is defined else none %}
       <ul>
         <li><a href="/productos">Productos</a></li>
+        <li><a href="/cotizaciones">Cotizaciones</a></li>
         {% if owner %}
         <li>{{ owner.name }}</li>
         <li>

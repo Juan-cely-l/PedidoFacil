@@ -22,6 +22,7 @@ from tests.doubles import (
     ScriptedModel,
     extraction_model,
     line_payload,
+    log_in,
     quote_agent,
     seed_reference_catalog,
 )
@@ -134,8 +135,10 @@ def test_la_fecha_de_creacion_se_muestra_en_hora_de_colombia(
     _install(auth_app, _two_products(ref))
     # 03:30 UTC del sábado 21 es el viernes 20 a las 22:30 en Bogotá.
     with time_machine.travel(datetime.datetime(2026, 11, 21, 3, 30, tzinfo=datetime.UTC)):
+        log_in(client)  # la sesión se firma a la hora simulada
         quote_id = _post_quote(client, "dos tortas medianas y un cafe")
 
+    log_in(client)  # de vuelta a la hora real: la sesión simulada ya caducó
     html = client.get(f"/cotizaciones/{quote_id}").text
 
     assert "20/11/2026 22:30" in html
@@ -147,6 +150,7 @@ def test_las_fechas_relativas_se_resuelven_con_el_dia_de_colombia(
     _install(auth_app, _two_products(ref, delivery_date={"kind": "weekday", "weekday": 5}))
     # En UTC ya es sábado 21; en Bogotá aún es viernes 20, así que «el sábado» es mañana.
     with time_machine.travel(datetime.datetime(2026, 11, 21, 3, 30, tzinfo=datetime.UTC)):
+        log_in(client)  # la sesión se firma a la hora simulada
         quote_id = _post_quote(client, "dos tortas medianas y un cafe para el sabado")
 
     quote = _stored_quote(auth_app, quote_id)
@@ -210,10 +214,13 @@ def test_la_lista_va_de_la_mas_reciente_a_la_mas_antigua_con_su_total(
 ) -> None:
     _install(auth_app, _two_products(ref))
     with time_machine.travel(datetime.datetime(2026, 11, 20, 15, 0, tzinfo=datetime.UTC)):
+        log_in(client)  # la sesión se firma a la hora simulada
         first = _post_quote(client, "dos tortas medianas y un cafe")
     with time_machine.travel(datetime.datetime(2026, 11, 20, 16, 0, tzinfo=datetime.UTC)):
+        log_in(client)  # la sesión se firma a la hora simulada
         second = _post_quote(client, "dos tortas medianas y un cafe, otra vez")
 
+    log_in(client)  # de vuelta a la hora real: la sesión simulada ya caducó
     html = client.get("/cotizaciones").text
 
     assert html.index(f'href="/cotizaciones/{second}"') < html.index(
