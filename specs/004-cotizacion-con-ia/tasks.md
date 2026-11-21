@@ -91,31 +91,31 @@ servicio.
 
 ### Pruebas de los fundamentos (rojo) ⚠️
 
-- [ ] T003 [P] Ampliar `tests/unit/test_config.py`, según contracts/configuration.md:
+- [x] T003 [P] Ampliar `tests/unit/test_config.py`, según contracts/configuration.md:
   - **Valores por defecto**: `gemini_model == "gemini-3.5-flash-lite"`, `gemini_fallback_model == "gemini-3.8-flash"`, `ai_timeout_seconds == 10`.
   - **Respaldo desactivado**: `GEMINI_FALLBACK_MODEL=""` da `gemini_fallback_model is None`.
   - **Respaldo igual al principal**: `GEMINI_MODEL="x"` y `GEMINI_FALLBACK_MODEL="x"` lanza `ValidationError` que nombra `GEMINI_FALLBACK_MODEL`.
   - **Modelo vacío**: `GEMINI_MODEL=""` lanza `ValidationError`.
   - **Tope del principio V**: `AI_TIMEOUT_SECONDS` igual a `0`, `-1` o `15.01` lanza `ValidationError` en `local`, `test` y `production`; `15` y `0.5` se aceptan.
   - **`.env.example`**: ampliar `tests/unit/test_env_example.py` solo si no recorre los campos de `Settings` por sí sola; si los recorre, las tres variables nuevas quedan cubiertas sin cambiarla.
-- [ ] T004 [P] Prueba en `tests/unit/test_model_requests_off.py` (nuevo), research R10:
+- [x] T004 [P] Prueba en `tests/unit/test_model_requests_off.py` (nuevo), research R10:
   - `pydantic_ai.models.ALLOW_MODEL_REQUESTS is False` durante las pruebas.
   - Un `Agent(GoogleModel("gemini-3.5-flash-lite", provider=GoogleProvider(api_key="clave-falsa")))` lanza `RuntimeError` al ejecutar `run_sync("hola")`, sin tocar la red.
-- [ ] T005 [P] Prueba en `tests/unit/test_quote_ai.py` (nuevo) para el esquema de salida (data-model.md «Salida de la IA», research R5, RD-2):
+- [x] T005 [P] Prueba en `tests/unit/test_quote_ai.py` (nuevo) para el esquema de salida (data-model.md «Salida de la IA», research R5, RD-2):
   - **Sin precios**: ningún campo de `QuoteExtraction`, `ExtractedLine` ni `DateExpression` contiene `price`, `subtotal`, `total` ni `precio` (recorrer `model_fields`).
   - **`extra="forbid"`**: `QuoteExtraction.model_validate({"lines": [{"customer_text": "x", "product_id": 1, "variant_id": None, "quantity": 1, "price": 100}]})` lanza `ValidationError`.
-  - **Límites**: `lines` «máx. 30»; `customer_text` «1..200»; `delivery_address` «≤ 200»; `delivery_time` «"HH:MM" (24 h)» (rechaza `"25:00"` y `"3pm"`); `delivery_mode` solo `"domicilio"`, `"recoger"` o `None`; `DateExpression.days` «0..60», `weekday` «0 = lunes … 6 = domingo», `day` «1..31», `date` «"YYYY-MM-DD"»; `kind` solo `"today"`, `"offset"`, `"weekday"`, `"day_of_month"`, `"absolute"` o `"unknown"`.
-- [ ] T006 [P] Prueba en `tests/unit/test_quote_bank.py` (nuevo), research R14:
+  - **Límites**: `lines` «máx. 30»; `customer_text` «1..200»; `delivery_address` «≤ 200»; `delivery_time` es texto libre «1..40», sin formato (research R7b): acepta `"9:00"`, `"3pm"`, `"a las 3 de la tarde"` y hasta `"25:00"`, y una extracción con líneas válidas y una hora mal escrita **sigue siendo válida**; rechaza `""` y más de 40 caracteres; `delivery_mode` solo `"domicilio"`, `"recoger"` o `None`; `DateExpression.days` «0..60», `weekday` «0 = lunes … 6 = domingo», `day` «1..31», `date` «"YYYY-MM-DD"»; `kind` solo `"today"`, `"offset"`, `"weekday"`, `"day_of_month"`, `"absolute"` o `"unknown"`.
+- [x] T006 [P] Prueba en `tests/unit/test_quote_bank.py` (nuevo), research R14:
   - **Invariantes del banco**: `len(MENSAJES) >= 12`; al menos 2 casos con un ítem `no_reconocido`; al menos 1 con `falta_variante`; cada `texto` es igual a su versión en minúsculas y no tiene `á é í ó ú ü` (la `ñ` se permite); al menos 1 con esperado vacío (no es un pedido); todo ítem «Lista» esperado existe en `CATALOGOS[caso.negocio]` y todo `product_id` esperado no nulo es de ese catálogo; los ids de caso son únicos; todo `origen` es `"E01"`, `"E02"` o `"inventado"`.
   - **`puntuar`**: líneas idénticas a lo esperado dan `Acierto(esperados=n, correctos=n, sobrantes=0)` y `valor == 1.0`; **casos límite**: esperado vacío y sin líneas da `valor == 1.0`, esperado vacío con una línea da `valor == 0.0`; con `quantity=None` esperada, cualquier cantidad cuenta como correcta; una cantidad equivocada no cuenta como correcta; una línea de más cuenta como sobrante y baja el porcentaje; un producto inventado (id fuera de lo esperado) es sobrante y no correcto; un no reconocido esperado se acierta con una línea `por_revisar` sin producto; cada línea se usa para un solo ítem esperado.
-- [ ] T007 [P] Prueba de guarda en `tests/unit/test_service_boundary.py` (nuevo), research R8 y RD-1: en un intérprete limpio (`subprocess.run([sys.executable, "-I", "-c", …])` con la raíz del repo en `sys.path`), importar `app.services.quotes` y `app.services.quote_ai` y verificar que `fastapi`, `starlette`, `jinja2`, `app.config` y `app.db` **no** están en `sys.modules`. Nota: con los esqueletos de T009 esta prueba puede pasar desde el rojo; es una guarda contra regresiones y se declara así en su docstring.
-- [ ] T008 [P] Ampliar `tests/integration/test_migrations.py` (data-model.md «Tablas nuevas»):
+- [x] T007 [P] Prueba de guarda en `tests/unit/test_service_boundary.py` (nuevo), research R8 y RD-1: en un intérprete limpio (`subprocess.run([sys.executable, "-I", "-c", …])` con la raíz del repo en `sys.path`), importar `app.services.quotes` y `app.services.quote_ai` y verificar que `fastapi`, `starlette`, `jinja2`, `app.config` y `app.db` **no** están en `sys.modules`. Nota: con los esqueletos de T009 esta prueba puede pasar desde el rojo; es una guarda contra regresiones y se declara así en su docstring.
+- [x] T008 [P] Ampliar `tests/integration/test_migrations.py` (data-model.md «Tablas nuevas»):
   - Las migraciones crean `quote` y `quote_line`; la prueba existente de modelos frente a migraciones sigue en verde.
   - **`quote`**: rechaza `status` distinto de `'borrador'`; `ai_outcome` fuera de `('ok','timeout','provider_error','invalid_output','disabled')`; `delivery_mode` fuera de `('domicilio','recoger')`.
   - **`quote_line`**: rechaza `status` fuera de `('lista','por_revisar')`; `quantity` fuera de «BETWEEN 1 AND 999»; `unit_price <= 0`; una línea `lista` sin `product_id`, `unit_price`, `quantity` o `label`, o con `review_reason`; una línea `por_revisar` sin `review_reason`; `review_reason` fuera de `('no_reconocido','falta_variante','cantidad_invalida')`.
   - **Borrado**: borrar una `quote` borra sus líneas (`ON DELETE CASCADE`); borrar un `product` referenciado por una línea falla (`RESTRICT`).
   - `downgrade` hasta la revisión anterior elimina las dos tablas.
-- [ ] T009 Esqueletos y dobles para el rojo:
+- [x] T009 Esqueletos y dobles para el rojo:
   - `app/services/quote_ai.py`: solo docstring e imports de pydantic; los tipos llegan en T012.
   - `app/services/quotes.py`: docstring; `LineDraft` y las funciones de los contratos llegan en sus historias.
   - `tests/doubles.py` (ampliar): `extraction_model(payload: dict[str, object]) -> FunctionModel`, que responde con `ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, payload)])` y cuenta sus llamadas en `.calls`; `slow_model(seconds: float)`, con `await asyncio.sleep(seconds)`; `failing_model(status_code: int = 503)`, que lanza `ModelHTTPError(status_code, "modelo-falso")`; `extraction_from_bank(caso: CasoBanco) -> dict[str, object]`, que arma la salida que daría una IA perfecta para ese caso (para los no reconocidos, `product_id=None`; para el que no es un pedido, `lines=[]`; `customer_text` es el texto completo del caso recortado a 200).
@@ -156,6 +156,7 @@ cotización guardada tiene sus precios, subtotales y total correctos, y la pági
   - `day_of_month` 25 da el 2026-11-25; 10 (ya pasó) da el 2026-12-10; 31 en un mes que no lo tiene da `(None, True)`.
   - `absolute` futura se toma tal cual; una pasada se conserva con `True`.
   - `unknown` da `(None, True)`; `None` (no se mencionó) da `(None, False)`.
+  - **Hora (research R7b)**, `resolve_delivery_time(expr)`: `"15:00"` y `"3 de la tarde"` y `"3 pm"` dan `(15:00, False)`; `"9:00"`, `"9"` y `"9 de la mañana"` dan `(09:00, False)`; `"7:30 pm"` da `(19:30, False)`; `"mediodia"` da `(12:00, False)`; `"a las 3"` da `(15:00, True)`; `"en la tarde"` y `"25:00"` dan `(None, True)`; `None` da `(None, False)`.
 - [ ] T018 [P] [US1] Prueba en `tests/unit/test_quote_agent.py` (nuevo) para `build_quote_agent` (contracts/quote-service.md, research R2–R3), sin red:
   - `provider="fake"` devuelve `None`.
   - Con `provider="gemini"`, `api_key="clave-falsa"`, `fallback_model_name="gemini-3.8-flash"`: el modelo del agente es un `FallbackModel` cuyos modelos se llaman `gemini-3.5-flash-lite` y `gemini-3.8-flash`, y su `fallback_on` incluye `ModelAPIError`.
@@ -170,7 +171,7 @@ cotización guardada tiene sus precios, subtotales y total correctos, y la pági
 - [ ] T020 [P] [US1] Prueba en `tests/unit/test_quote_service.py` (nuevo) para `quote_message` y los totales, con la fixture `session`, el catálogo de referencia y `extraction_model`:
   - **Camino feliz**: dos productos reconocidos dan una `Quote` guardada, con `status="borrador"`, `ai_outcome="ok"`, `ai_duration_ms` no nulo, `customer_message` sin espacios a los extremos, `created_at == now` y líneas con `position` 1 y 2.
   - **Totales (SC-003)**: `quote_total` es `45000 × 2 + 3500 × 1 = 93500`, y cada `unit_price` sale del catálogo.
-  - **Entrega**: «para recoger el sábado a las 3 de la tarde» simulado como `kind="weekday"`, `"15:00"` y `"recoger"` da `delivery_date=2026-11-21`, `delivery_time=15:00` y `delivery_mode="recoger"`; con dirección y `delivery_mode="domicilio"` se guarda la dirección; sin datos de entrega, todo queda nulo y sin marcas.
+  - **Entrega**: «para recoger el sábado a las 3 de la tarde» simulado como `kind="weekday"`, `"a las 3 de la tarde"` y `"recoger"` da `delivery_date=2026-11-21`, `delivery_time=15:00` sin marca y `delivery_mode="recoger"`; la hora `"a las 3"` da 15:00 con `delivery_time_needs_review=True`; una hora `"9:00"` no manda la cotización al camino manual (`ai_outcome="ok"`, con sus líneas); con dirección y `delivery_mode="domicilio"` se guarda la dirección; sin datos de entrega, todo queda nulo y sin marcas.
   - **Errores de dominio, sin llamar a la IA** (`model.calls == 0`): `""` y `"   "` lanzan `EmptyMessageError`; 2001 caracteres lanzan `MessageTooLongError`; un catálogo sin nada cotizable lanza `NothingToQuoteError`.
   - **Lista**: `list_quotes` devuelve las cotizaciones de la más reciente a la más antigua.
 - [ ] T021 [P] [US1] Prueba en `tests/integration/test_quote_pages.py` (nuevo), contracts/quote-pages.md, con el cliente con sesión, el catálogo de referencia y el extractor sustituido:
@@ -180,7 +181,7 @@ cotización guardada tiene sus precios, subtotales y total correctos, y la pági
   - **Validación**: mensaje vacío → `422` con «Pega el mensaje del cliente»; 2001 caracteres → `422` con «El mensaje es demasiado largo (máximo 2.000 caracteres)»; sin nada cotizable → `409`. En los tres, `model.calls == 0` y el texto escrito se conserva.
   - `GET /cotizaciones`: más reciente primero, con fecha, estado, total y enlace; sin cotizaciones, «Aún no hay cotizaciones» con enlace a «Nueva cotización».
   - `GET /cotizaciones/999` → `404`. `base.html` muestra el enlace «Cotizaciones».
-- [ ] T022 [US1] Esqueletos con `raise NotImplementedError`: en `app/services/quote_ai.py`, `INSTRUCTIONS = ""`, `render_catalog_prompt`, `resolve_delivery_date` y `build_quote_agent`; en `app/services/quotes.py`, `build_lines`, `quote_message`, `get_quote`, `list_quotes`, `quote_total`, `pending_count` y las excepciones `EmptyMessageError`, `MessageTooLongError`, `NothingToQuoteError` y `QuoteNotFoundError`; en `app/routers/quotes.py`, el `router` vacío y `get_quote_extractor`, incluido en `app/main.py`.
+- [ ] T022 [US1] Esqueletos con `raise NotImplementedError`: en `app/services/quote_ai.py`, `INSTRUCTIONS = ""`, `render_catalog_prompt`, `resolve_delivery_date`, `resolve_delivery_time` y `build_quote_agent`; en `app/services/quotes.py`, `build_lines`, `quote_message`, `get_quote`, `list_quotes`, `quote_total`, `pending_count` y las excepciones `EmptyMessageError`, `MessageTooLongError`, `NothingToQuoteError` y `QuoteNotFoundError`; en `app/routers/quotes.py`, el `router` vacío y `get_quote_extractor`, incluido en `app/main.py`.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 1.** Ejecutar `uv run pytest`, mostrar que
 cada prueba nueva falla por la razón esperada, detenerse y esperar la aprobación del autor.
@@ -188,7 +189,7 @@ Después, commit `test(PED-16): pruebas de cotizar un mensaje`.
 
 ### Implementación de la Historia 1 (verde)
 
-- [ ] T023 [P] [US1] En `app/services/quote_ai.py`: `INSTRUCTIONS` con los 7 puntos de research R6; `render_catalog_prompt` con los bloques de R6, agrupando las variantes por `product_id` y **sin precios**; `resolve_delivery_date` con las reglas de R7; `build_quote_agent` con `GoogleModel` y `GoogleProvider(api_key=…)`, `FallbackModel(…, fallback_on=(ModelHTTPError,))` si hay respaldo, `ModelSettings` de R3 (razonamiento apagado, `timeout`, `request_timeout`, `max_retries=0`), `retries={"output": 1}` e `instructions=INSTRUCTIONS`. Sin importar `app.config`.
+- [ ] T023 [P] [US1] En `app/services/quote_ai.py`: `INSTRUCTIONS` con los 7 puntos de research R6; `render_catalog_prompt` con los bloques de R6, agrupando las variantes por `product_id` y **sin precios**; `resolve_delivery_date` con las reglas de R7; `resolve_delivery_time` con las reglas de R7b; `build_quote_agent` con `GoogleModel` y `GoogleProvider(api_key=…)`, `FallbackModel(…, fallback_on=(ModelHTTPError,))` si hay respaldo, `ModelSettings` de R3 (razonamiento apagado, `timeout`, `request_timeout`, `max_retries=0`), `retries={"output": 1}` e `instructions=INSTRUCTIONS`. Sin importar `app.config`.
 - [ ] T024 [P] [US1] Crear `app/repositories/quotes.py`: `save_quote(session, quote, lines)`, `get_quote_with_lines(session, quote_id)` y `list_quotes(session)` ordenada por `created_at` descendente.
 - [ ] T025 [US1] En `app/services/quotes.py`: `build_lines` para ítems válidos (research R5, sin los casos «Por revisar», que llegan en US2); `quote_message` según contracts/quote-service.md (valida el mensaje, lee `list_quotable_items` **una vez**, llama al agente con `render_catalog_prompt` y `asyncio.timeout(timeout_seconds)`, mide la duración, resuelve la fecha y guarda); `get_quote`, `list_quotes`, `quote_total` y `pending_count`. Sin importar `app.config`, `app.db` ni nada web.
 - [ ] T026 [US1] En `app/routers/quotes.py`, las rutas `GET /cotizaciones`, `GET /cotizaciones/nueva`, `POST /cotizaciones` y `GET /cotizaciones/{id}` de contracts/quote-pages.md, con PRG. `get_quote_extractor` lee `request.app.state.quote_extractor`; `today` se calcula con `ZoneInfo("America/Bogota")` y `now` en UTC; el tiempo de espera sale de `Settings`. En `app/main.py`, construir el extractor con `build_quote_agent` desde `Settings` y registrar en el log de arranque los modelos y el tiempo de espera, nunca la clave.
@@ -227,7 +228,7 @@ total solo de la lista.
 - [ ] T031 [P] [US2] Ampliar `tests/integration/test_quote_pages.py`:
   - El detalle muestra la insignia «Por revisar», el motivo («No está en el catálogo», «Falta la presentación» o «Cantidad no válida») y el texto del cliente, sin precio ni subtotal en esa fila.
   - Con pendientes: «Incompleta: 2 línea(s) por revisar» en el encabezado y «No incluye las líneas por revisar» junto al total.
-  - «Por confirmar» junto a la fecha o la modalidad marcadas.
+  - «Por confirmar» junto a la fecha, la hora o la modalidad marcadas.
   - La lista muestra «2 por revisar» en esa cotización.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 2.** Ejecutar `uv run pytest`, mostrar que
@@ -306,7 +307,7 @@ líneas «Por revisar» y el total se recalcula sin que él haga cuentas.
   - `update_line` sobre una línea `por_revisar` con un `item` cotizable: pasa a `lista`, copia la etiqueta y el precio vigentes y limpia `review_reason`.
   - `update_line` cambiando la variante de Mediana a Grande: vuelve a copiar la etiqueta y el precio (`60000`).
   - `remove_line` quita la línea y el total baja; una línea de otra cotización lanza `QuoteLineNotFoundError`.
-  - `update_delivery` guarda fecha, hora, modalidad y dirección, y pone en `False` las dos marcas de revisión.
+  - `update_delivery` guarda fecha, hora, modalidad y dirección, y pone en `False` las tres marcas de revisión (fecha, hora y modalidad).
   - **Precio conservado (FR-015)**: tras cotizar, cambiar el precio del producto en el catálogo no cambia la línea existente; editar su producto o agregar una línea nueva toma el precio nuevo.
 - [ ] T045 [P] [US4] Ampliar `tests/integration/test_quote_pages.py`:
   - `POST /cotizaciones/{id}/lineas/{line_id}`, `…/eliminar` y `…/entrega` responden `303` y el detalle refleja el cambio y el total nuevo.

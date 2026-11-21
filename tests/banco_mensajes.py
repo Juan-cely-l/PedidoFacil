@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Literal
 from app.models.catalog import QuotableItem
 
 if TYPE_CHECKING:
-    from app.services.quotes import LineDraft  # type: ignore[import-not-found]
+    from app.services.quotes import LineDraft  # type: ignore[attr-defined]
 
 Negocio = Literal["reposteria", "accesorios"]
 Origen = Literal["E01", "E02", "inventado"]

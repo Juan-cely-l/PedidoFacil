@@ -126,3 +126,170 @@ def test_downgrade_elimina_las_tablas_del_catalogo(
     tables = inspect(connection).get_table_names()
     assert "product" not in tables
     assert "product_variant" not in tables
+
+
+# PED-16: tablas de cotización (data-model.md «Tablas nuevas»)
+
+QUOTE_TABLES = ("quote", "quote_line")
+
+INSERT_QUOTE = text(
+    "INSERT INTO quote (id, status, customer_message, created_at, ai_outcome, "
+    "delivery_date_needs_review, delivery_time_needs_review, delivery_mode, "
+    "delivery_mode_needs_review) "
+    "VALUES (1, :status, 'dos tortas', '2026-11-21 15:00:00', :ai_outcome, 0, 0, :mode, 0)"
+)
+VALID_QUOTE = {"status": "borrador", "ai_outcome": "ok", "mode": None}
+
+INSERT_LINE = text(
+    "INSERT INTO quote_line (quote_id, position, customer_text, status, review_reason, "
+    "product_id, variant_id, label, unit_price, quantity, quantity_assumed) "
+    "VALUES (1, 1, 'dos tortas', :status, :reason, :product_id, NULL, :label, :price, "
+    ":quantity, 0)"
+)
+VALID_LINE = {
+    "status": "lista",
+    "reason": None,
+    "product_id": 1,
+    "label": "Café",
+    "price": 18000,
+    "quantity": 2,
+}
+
+
+def _require_quote_tables(connection: Connection) -> None:
+    """Falla con una aserción clara si la migración de cotizaciones no se ha aplicado."""
+    tables = inspect(connection).get_table_names()
+    missing = [table for table in QUOTE_TABLES if table not in tables]
+    assert missing == [], f"faltan las tablas {missing}"
+
+
+def _insert_quote(connection: Connection, **overrides: object) -> None:
+    _require_quote_tables(connection)
+    connection.execute(INSERT_QUOTE, {**VALID_QUOTE, **overrides})
+
+
+def _insert_quote_with_coffee(connection: Connection) -> None:
+    _insert_coffee(connection)
+    _insert_quote(connection)
+
+
+def test_migraciones_crean_las_tablas_de_cotizacion(connection: Connection) -> None:
+    _require_quote_tables(connection)
+
+
+def test_una_cotizacion_y_una_linea_validas_se_guardan(connection: Connection) -> None:
+    _insert_quote_with_coffee(connection)
+
+    connection.execute(INSERT_LINE, VALID_LINE)
+
+    assert connection.execute(text("SELECT count(*) FROM quote_line")).scalar_one() == 1
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"status": "enviada"},
+        {"ai_outcome": "desconocido"},
+        {"mode": "envio"},
+    ],
+    ids=["estado", "resultado-de-la-ia", "modalidad"],
+)
+def test_la_base_rechaza_una_cotizacion_con_valores_fuera_del_dominio(
+    connection: Connection, overrides: dict[str, object]
+) -> None:
+    _require_quote_tables(connection)
+
+    with pytest.raises(IntegrityError):
+        _insert_quote(connection, **overrides)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"status": "aprobada"},
+        {"quantity": 0},
+        {"quantity": 1000},
+        {"price": 0},
+        {"product_id": None},
+        {"price": None},
+        {"quantity": None},
+        {"label": None},
+        {"reason": "no_reconocido"},
+        {"status": "por_revisar", "price": None, "label": None, "reason": None},
+        {"status": "por_revisar", "price": 18000, "reason": "falta_variante"},
+        {"status": "por_revisar", "price": None, "reason": "otro_motivo"},
+    ],
+    ids=[
+        "estado-desconocido",
+        "cantidad-cero",
+        "cantidad-mayor-que-999",
+        "precio-cero",
+        "lista-sin-producto",
+        "lista-sin-precio",
+        "lista-sin-cantidad",
+        "lista-sin-etiqueta",
+        "lista-con-motivo",
+        "por-revisar-sin-motivo",
+        "por-revisar-con-precio",
+        "motivo-desconocido",
+    ],
+)
+def test_la_base_rechaza_una_linea_que_rompe_su_invariante(
+    connection: Connection, overrides: dict[str, object]
+) -> None:
+    _insert_quote_with_coffee(connection)
+
+    with pytest.raises(IntegrityError):
+        connection.execute(INSERT_LINE, {**VALID_LINE, **overrides})
+
+
+def test_una_linea_por_revisar_sin_producto_ni_precio_se_guarda(connection: Connection) -> None:
+    _insert_quote_with_coffee(connection)
+
+    connection.execute(
+        INSERT_LINE,
+        {
+            "status": "por_revisar",
+            "reason": "no_reconocido",
+            "product_id": None,
+            "label": None,
+            "price": None,
+            "quantity": None,
+        },
+    )
+
+    assert connection.execute(text("SELECT count(*) FROM quote_line")).scalar_one() == 1
+
+
+def test_las_claves_foraneas_de_las_lineas_tienen_sus_acciones(connection: Connection) -> None:
+    # SQLite no aplica las claves foráneas sin PRAGMA; se verifica el esquema declarado, que es
+    # el que PostgreSQL sí aplica en producción.
+    _require_quote_tables(connection)
+
+    actions = {
+        fk["referred_table"]: fk["options"].get("ondelete")
+        for fk in inspect(connection).get_foreign_keys("quote_line")
+    }
+
+    assert actions == {"quote": "CASCADE", "product": "RESTRICT", "product_variant": "RESTRICT"}
+
+
+def test_la_lista_de_cotizaciones_tiene_indice_por_fecha(connection: Connection) -> None:
+    _require_quote_tables(connection)
+
+    indexed = [index["column_names"] for index in inspect(connection).get_indexes("quote")]
+
+    assert ["created_at"] in indexed
+
+
+def test_downgrade_de_un_paso_elimina_solo_las_tablas_de_cotizacion(
+    alembic_config: Config, connection: Connection
+) -> None:
+    _require_quote_tables(connection)
+
+    command.downgrade(alembic_config, "-1")
+
+    tables = inspect(connection).get_table_names()
+    assert not set(QUOTE_TABLES) & set(tables)
+    assert "product" in tables
+    assert "product_variant" in tables

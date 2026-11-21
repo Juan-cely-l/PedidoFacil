@@ -51,4 +51,5 @@ build_quote_agent(*, provider: Literal["fake","gemini"], api_key: str | None,
                   timeout_seconds: float) -> Agent[None, QuoteExtraction] | None
 render_catalog_prompt(items: list[QuotableItem], message: str) -> str  # sin precios
 resolve_delivery_date(expr: DateExpression | None, today: date) -> tuple[date | None, bool]
+resolve_delivery_time(expr: str | None) -> tuple[time | None, bool]   # research R7b
 ```

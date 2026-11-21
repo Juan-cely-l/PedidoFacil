@@ -17,7 +17,8 @@ de entrega como `date` local de Colombia.
 | `ai_duration_ms` | int, nulo | Duración de la consulta; nulo si fue `disabled`. |
 | `delivery_date` | date, nulo | Resuelta por el código (R7). |
 | `delivery_date_needs_review` | bool | La fecha coincide con hoy, ya pasó o no se pudo resolver habiendo una mención. |
-| `delivery_time` | time, nulo | |
+| `delivery_time` | time, nulo | Normalizada por el código (research R7b). |
+| `delivery_time_needs_review` | bool | El cliente mencionó una hora que no se pudo normalizar con seguridad, o una hora de 1 a 6 sin «mañana» ni «tarde». |
 | `delivery_mode` | texto (≤ 10), nulo | `CHECK IN ('domicilio','recoger')` |
 | `delivery_mode_needs_review` | bool | Hay dirección pero el cliente no dijo la modalidad: se asume `domicilio` y se marca. |
 | `delivery_address` | texto (≤ 200), nulo | |
@@ -79,7 +80,8 @@ de precio, subtotal ni total** (RD-2; lo verifica una prueba).
 QuoteExtraction
 ├── lines: list[ExtractedLine]         (máx. 30)
 ├── delivery_date: DateExpression | None
-├── delivery_time: "HH:MM" | None      (24 h)
+├── delivery_time: str | None          (1..40; la expresión de hora tal como la vio, sin formato:
+│                                        «a las 3 de la tarde», «9:00»; la normaliza el código, R7b)
 ├── delivery_mode: "domicilio" | "recoger" | None
 └── delivery_address: str | None       (≤ 200)
 
@@ -98,7 +100,7 @@ DateExpression
 ```
 
 El código convierte `QuoteExtraction` en filas de `quote` y `quote_line` con las reglas de
-research.md R5 (líneas) y R7 (fecha). `QuoteExtraction` no se guarda.
+research.md R5 (líneas), R7 (fecha) y R7b (hora). `QuoteExtraction` no se guarda.
 
 El paso intermedio es `build_lines(extraction, items) -> list[LineDraft]`, una función pura. Un
 `LineDraft` tiene los campos de `quote_line` sin ids de cotización ni de línea: `customer_text`,

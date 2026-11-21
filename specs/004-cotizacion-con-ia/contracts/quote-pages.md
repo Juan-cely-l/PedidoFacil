@@ -47,7 +47,7 @@ prueba lo verifica.
   pendientes, el aviso «No incluye las líneas por revisar».
 - **Formulario «Agregar producto»**: un `<select>` de ítems cotizables y la cantidad.
 - **Formulario de entrega**: fecha, hora, modalidad y dirección. «Por confirmar» aparece junto a
-  la fecha o la modalidad marcadas.
+  la fecha, la hora o la modalidad marcadas.
 - **Ancho**: la página es usable a 360 px. En pantallas angostas, la tabla se vuelve una lista
   apilada.
 
