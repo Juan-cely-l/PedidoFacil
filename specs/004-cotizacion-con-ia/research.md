@@ -69,14 +69,15 @@ variantes y cantidades correctos).
 
 1. **Petición realista**: el mismo agente, las mismas instrucciones, el mismo esquema de salida y
    la misma conversión a líneas (`build_lines`) que la app, sobre el **banco de mensajes** (R14):
-   12 mensajes como mínimo, cada uno con su resultado esperado, y el catálogo de ejemplo del
-   banco.
+   12 mensajes como mínimo, cada uno con su resultado esperado, y el catálogo fijo de su
+   negocio.
 2. **Candidatos**: `gemini-3.5-flash-lite`, `gemini-3.5-flash` y `gemini-3.8-flash`, los tres con
    `thinking=False`, que es como los usa la app.
 3. **Condiciones**: `max_retries=0`, sin respaldo y con 30 s de tiempo de espera, para medir el
    tiempo real aunque supere el límite de la app.
 4. **Muestra**: cada mensaje del banco una vez por modelo, en **dos franjas del mismo día**
-   (mañana y tarde, hora de Colombia). Son 3 × 12 × 2 = 72 peticiones. Una petición cada 5 s,
+   (mañana y tarde, hora de Colombia). Con los 17 mensajes actuales son 3 × 17 × 2 = 102
+   peticiones. Una petición cada 5 s,
    para no confundir la latencia con el límite de peticiones por minuto. Cada franja tarda menos
    de una hora.
 5. **Registro**: por petición, el modelo, la franja, el id del mensaje, la duración, el resultado
@@ -324,39 +325,61 @@ variantes y cantidades correctos).
 
 ## R14. Banco de mensajes: la entrada de las pruebas y de la medición
 
-- **Decisión**: un módulo `tests/banco_mensajes.py`, tipado y revisado por mypy, con tres cosas:
-  - `CATALOGO`: una lista fija de unos 20 `QuotableItem` con ids estables, varios con variantes
-    (tamaños, sabores) y varios sin ellas.
-  - `MENSAJES`: **al menos 12** casos. Cada caso tiene un id, el texto y su resultado esperado:
-    una lista de ítems con `product_id`, `variant_id`, `quantity` y estado («Lista» o «Por
-    revisar», con su motivo).
+- **Decisión**: un módulo `tests/banco_mensajes.py`, tipado y revisado por mypy, con:
+  - `CATALOGOS`: un catálogo fijo de `QuotableItem` **por negocio** (`"reposteria"` y
+    `"accesorios"`), con ids estables y etiquetas con el formato de `list_quotable_items`. No se
+    usa el catálogo de producción: las pruebas y el script resuelven contra los mismos ids, así
+    que los resultados son reproducibles. Hay uno por negocio porque cada mensaje se cotiza
+    contra el catálogo de quien lo recibe.
+  - `MENSAJES`: **al menos 12** casos (hoy 17). Cada caso tiene un id, su negocio, su
+    procedencia (`origen`), el texto y su resultado esperado: ítems con `product_id`,
+    `variant_id`, `quantity` y estado («Lista» o «Por revisar», con su motivo). Ningún ítem
+    esperado lleva precio.
   - `puntuar(esperado, lineas) -> Acierto`: compara las líneas que produjo `build_lines` (R5)
     con lo esperado.
 - **Cómo son los mensajes**: como escribe la gente por WhatsApp. En el conjunto tiene que haber:
   - minúsculas y sin tildes;
-  - cantidades en palabras («dos», «una docena», «media docena», «un par»);
-  - varios productos en una sola frase;
+  - cantidades en palabras («dos», «una docena», «media docena», «un par», «unas veinte»);
+  - varios productos en una sola frase, y errores de escritura;
   - fechas relativas («pa mañana», «el sabado»);
   - **al menos dos** mensajes con productos que no están en el catálogo;
-  - al menos uno que pide un producto con variantes sin decir cuál («falta la presentación»).
-
-  Son textos inventados para el banco, no mensajes reales de clientes (principio VI).
+  - al menos uno sin cantidad y al menos uno ambiguo entre variantes («falta la presentación»);
+  - un mensaje que **no es un pedido** («estan abiertos hoy?»): cero líneas y cero «Por
+    revisar». Es el caso más común en el WhatsApp de un negocio y donde un modelo está más
+    tentado de inventar líneas;
+  - un mensaje que **menciona un precio** distinto del catálogo («estaba en 40 mil»): la línea
+    lleva el precio del catálogo, nunca el del mensaje (principio V; antecedente de HU-20).
+- **Procedencia y limitación de SC-008**: **ningún mensaje del banco es real.** Los marcados
+  `E01` y `E02` están escritos a partir del perfil de esos casos (qué datos pide cada negocio y
+  qué error se observó), que son **simulados con datos inventados** y no registran mensajes
+  textuales (PED-66, PED-67). Los demás son inventados para cubrir casos que E01 y E02 no
+  muestran. El acierto medido dice cómo extrae el modelo mensajes plausibles, no los de clientes
+  reales, y se reporta así (principio VI: tampoco hay datos personales).
 - **Regla de acierto**, fijada el 2026-11-21, antes de medir:
   - un ítem esperado es **correcto** si hay una línea, no usada por otro ítem, con el mismo
-    estado, producto, variante y cantidad. Para un producto fuera del catálogo, lo correcto es
-    una línea «Por revisar» sin producto;
+    estado, producto y variante, y con la misma cantidad cuando la esperada no es `None`
+    (`None` = la cantidad no se evalúa: ítems fuera del catálogo o sin una cantidad clara que
+    exigir). Para un producto fuera del catálogo, lo correcto es una línea «Por revisar» sin
+    producto;
   - una línea que no corresponde a ningún ítem esperado es **sobrante**;
-  - **acierto = correctos / (esperados + sobrantes)**. Los sobrantes cuentan en contra, para que
-    inventar líneas no salga gratis.
+  - **acierto = correctos / (esperados + sobrantes)**, entre 0.0 y 1.0. Los sobrantes cuentan en
+    contra, para que inventar líneas no salga gratis;
+  - **caso límite**: con esperados = 0 y sobrantes = 0, el acierto es **1.0**; con esperados = 0
+    y algún sobrante, es **0.0**. Así el mensaje que no es un pedido no divide cero entre cero.
+  - SC-008 se cumple con un acierto global ≥ 0.8, sumando correctos, esperados y sobrantes de
+    todo el banco (no promediando por mensaje).
 - **Uso en las pruebas** (sin red): el banco es la entrada de las pruebas de extracción, así que
   existe antes que ellas.
-  - **Invariantes del banco**: al menos 12 mensajes, al menos 2 fuera del catálogo, textos en
-    minúsculas y sin tildes, y todo id esperado existe en `CATALOGO`.
+  - **Invariantes del banco**: al menos 12 mensajes, al menos 2 fuera del catálogo, al menos uno
+    que no es un pedido, textos en minúsculas y sin tildes, y todo id esperado existe en el
+    catálogo **de su negocio**.
   - **Conversión**: para cada mensaje, un `FunctionModel` devuelve la extracción que corresponde
-    a lo esperado, y `build_lines` más `puntuar` dan 100 %. Si la IA acierta, el código no pierde
-    nada en el camino.
-  - **Puntuación**: casos de `puntuar` con una cantidad equivocada, un sobrante y un producto
-    inventado.
+    a lo esperado, y `build_lines` contra `CATALOGOS[caso.negocio]` más `puntuar` dan 1.0. Si la
+    IA acierta, el código no pierde nada en el camino. Además, cada línea «Lista» lleva el
+    `unit_price` de su ítem del catálogo (en R10, 45000 y no los 40 mil del mensaje).
+  - **Puntuación**: casos de `puntuar` con una cantidad equivocada, un sobrante, un producto
+    inventado y los dos casos límite.
 - **Uso en la medición**: `scripts/medir_gemini.py` importa el mismo módulo y llama al modelo
-  real con cada mensaje (R2). Se ejecuta como `uv run --no-sync python -m scripts.medir_gemini`,
-  para que la raíz del proyecto esté en la ruta de importación.
+  real con cada mensaje y el catálogo de su negocio (R2). Se ejecuta como
+  `uv run --no-sync python -m scripts.medir_gemini`, para que la raíz del proyecto esté en la
+  ruta de importación.

@@ -163,7 +163,7 @@ scripts/
 tests/
 ├── conftest.py             # MODIFICAR: ALLOW_MODEL_REQUESTS=False; fixture del extractor sustituido
 ├── doubles.py              # MODIFICAR: constructores de FunctionModel (respuesta, lento, 503, inválido)
-├── banco_mensajes.py       # NUEVO: CATALOGO, MENSAJES (≥ 12, con lo esperado) y puntuar (R14)
+├── banco_mensajes.py       # NUEVO: CATALOGOS por negocio, MENSAJES (≥ 12, con lo esperado) y puntuar (R14)
 ├── unit/
 │   ├── test_quote_bank.py         # NUEVO: invariantes del banco, conversión al 100 %, puntuación
 │   ├── test_quote_ai.py           # NUEVO: esquema sin precios, instrucciones sin precios, fechas

@@ -60,7 +60,7 @@ uv run --no-sync python -m scripts.medir_gemini --franja manana   # y luego --fr
 
 Sigue el protocolo de [research.md R2](research.md#cómo-se-vuelve-a-medir-antes-del-merge-y-cada-vez-que-se-dude):
 - **Muestra**: los 12 o más mensajes del banco (R14) con los 3 modelos, en dos franjas del mismo
-  día (72 peticiones).
+  día (102 peticiones con los 17 mensajes actuales).
 - **Reporte**: por modelo, el porcentaje de respuestas válidas en 10 s o menos, p50, p95 y el
   porcentaje de acierto. El acierto del modelo elegido valida SC-008 (≥ 80 %).
 - **Resultado**: se guarda en `specs/004-cotizacion-con-ia/mediciones.csv`.
