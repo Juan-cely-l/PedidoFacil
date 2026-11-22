@@ -247,3 +247,27 @@ def test_el_mensaje_de_usuario_no_lleva_ningun_precio(negocio: Negocio) -> None:
         with_dots = f"{item.unit_price:,}".replace(",", ".")
         assert str(item.unit_price) not in prompt
         assert with_dots not in prompt
+
+
+def _no_order_rule() -> str:
+    """La regla de las instrucciones para un mensaje sin pedidos (caso R09 del banco)."""
+    rules = [line for line in quote_ai.INSTRUCTIONS.splitlines() if "ningún pedido" in line]
+    assert len(rules) == 1, "falta la regla del mensaje que no contiene ningún pedido"
+    return rules[0]
+
+
+def test_las_instrucciones_piden_cero_lineas_si_el_mensaje_no_es_un_pedido() -> None:
+    rule = _no_order_rule()
+
+    assert "deja lines vacía" in rule
+    # Ni siquiera una línea sin producto, que quedaría «Por revisar».
+    assert "ni siquiera con product_id en null" in rule
+
+
+def test_la_regla_sin_pedido_no_descarta_a_quien_pregunta_por_un_producto() -> None:
+    # R03 y A03 preguntan el precio; R08, A05 y A07, si hay algo fuera del catálogo. Sin esta
+    # aclaración, la regla nueva los dejaría en cero líneas.
+    rule = _no_order_rule()
+
+    assert "preguntar por un producto o por su precio sí es un pedido" in rule.lower()
+    assert "aunque no esté en el catálogo" in rule.lower()
