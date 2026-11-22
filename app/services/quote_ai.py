@@ -167,6 +167,10 @@ _NAMED_TIMES["medianoche"] = datetime.time(0, 0)
 # Sin «mañana» ni «tarde», una hora de 1 a 6 en un pedido se entiende de la tarde (spec).
 _AFTERNOON_GUESS = range(1, 7)
 _NOON = 12
+# «De la noche»: de 1 a 4 es la madrugada; de 5 a 11, la noche. Las 5 pueden ser cualquiera.
+_SMALL_HOURS = range(1, 5)
+_NIGHT_HOURS = range(5, 12)
+_AMBIGUOUS_NIGHT_HOUR = 5
 
 
 def resolve_delivery_time(expr: str | None) -> tuple[datetime.time | None, bool]:
@@ -185,6 +189,8 @@ def resolve_delivery_time(expr: str | None) -> tuple[datetime.time | None, bool]
     needs_review = False
     if period in {"am", "delamanana"}:
         hour = 0 if hour == _NOON else hour
+    elif period == "delanoche":
+        hour, needs_review = _night_hour(hour)
     elif period:
         hour = hour + _NOON if hour < _NOON else hour
     elif hour in _AFTERNOON_GUESS:
@@ -193,6 +199,17 @@ def resolve_delivery_time(expr: str | None) -> tuple[datetime.time | None, bool]
         return datetime.time(hour, minute), needs_review
     except ValueError:
         return None, True
+
+
+def _night_hour(hour: int) -> tuple[int, bool]:
+    """Las 12 de la noche son las 00:00; la 1 de la noche, la 01:00 (R7b)."""
+    if hour == _NOON:
+        return 0, False
+    if hour in _SMALL_HOURS:
+        return hour, False
+    if hour in _NIGHT_HOURS:
+        return hour + _NOON, hour == _AMBIGUOUS_NIGHT_HOUR
+    return hour, False
 
 
 def _plain(text: str) -> str:

@@ -266,6 +266,9 @@ variantes y cantidades correctos).
   marca de revisión (`delivery_time_needs_review`):
   - `HH:MM`, `H:MM`, `H` o `H.MM`, con o sin «am», «pm», «a. m.», «p. m.», «de la mañana», «de la
     tarde» o «de la noche»; «mediodia» es 12:00 y «medianoche» 00:00;
+  - «de la noche» no equivale a «de la tarde» ni a «pm»: las 12 son las 00:00, de 1 a 4 es la
+    madrugada (01:00 a 04:00) y de 5 a 11 es la noche (17:00 a 23:00); **las 5 se marcan**,
+    porque pueden ser lo uno o lo otro;
   - hora de 1 a 6 **sin** indicación de mañana o tarde: se toma como la tarde (13:00 a 18:00),
     que es el caso límite de la spec («a las 3» en un pedido de comida), **y se marca** para que
     el dueño la confirme;
