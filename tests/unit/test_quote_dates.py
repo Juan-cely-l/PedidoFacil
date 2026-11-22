@@ -86,3 +86,28 @@ def test_cada_expresion_de_hora_se_normaliza(
 
 def test_sin_hora_mencionada_no_hay_hora_ni_marca() -> None:
     assert resolve_delivery_time(None) == (None, False)
+
+
+# «De la noche» no es «de la tarde»: las 12 y las primeras horas son de la madrugada.
+@pytest.mark.parametrize(
+    ("expr", "expected"),
+    [
+        ("12 de la noche", (datetime.time(0, 0), False)),
+        ("a las 12:30 de la noche", (datetime.time(0, 30), False)),
+        ("1 de la noche", (datetime.time(1, 0), False)),
+        ("a la 1 de la noche", (datetime.time(1, 0), False)),
+        ("4 de la noche", (datetime.time(4, 0), False)),
+        ("5 de la noche", (datetime.time(17, 0), True)),  # madrugada o tarde: se marca
+        # Guardas: lo que el arreglo no debe romper.
+        ("6 de la noche", (datetime.time(18, 0), False)),
+        ("11 de la noche", (datetime.time(23, 0), False)),
+        ("12 pm", (datetime.time(12, 0), False)),
+        ("1 pm", (datetime.time(13, 0), False)),
+        ("12 de la tarde", (datetime.time(12, 0), False)),
+        ("1 de la tarde", (datetime.time(13, 0), False)),
+    ],
+)
+def test_de_la_noche_distingue_la_madrugada_de_la_noche(
+    expr: str, expected: tuple[datetime.time | None, bool]
+) -> None:
+    assert resolve_delivery_time(expr) == expected
