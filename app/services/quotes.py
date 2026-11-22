@@ -15,8 +15,10 @@ from sqlmodel import Session
 
 from app.models.catalog import QuotableItem
 from app.models.quote import (
+    MAX_QUANTITY,
     MESSAGE_MAX_LENGTH,
     AiOutcome,
+    DeliveryMode,
     LineStatus,
     Quote,
     QuoteLine,
@@ -73,17 +75,31 @@ def build_lines(extraction: QuoteExtraction, items: list[QuotableItem]) -> list[
 
     El precio y la etiqueta salen solo del `QuotableItem`: la extracción no tiene precios.
     """
-    catalog = {(item.product_id, item.variant_id): item for item in items}
-    return [_line_from(line, catalog) for line in extraction.lines]
+    catalog: dict[tuple[int | None, int | None], QuotableItem] = {
+        (item.product_id, item.variant_id): item for item in items
+    }
+    products_with_variants = {item.product_id for item in items if item.variant_id is not None}
+    return [_line_from(line, catalog, products_with_variants) for line in extraction.lines]
 
 
 def _line_from(
-    line: ExtractedLine, catalog: dict[tuple[int, int | None], QuotableItem]
+    line: ExtractedLine,
+    catalog: dict[tuple[int | None, int | None], QuotableItem],
+    products_with_variants: set[int],
 ) -> LineDraft:
-    item = catalog.get((line.product_id, line.variant_id)) if line.product_id else None
-    if item is None or (line.quantity is not None and line.quantity < 1):
-        # Las líneas «Por revisar» son de la Historia 2.
-        raise NotImplementedError
+    item = catalog.get((line.product_id, line.variant_id))
+    if item is None:
+        if line.variant_id is None and line.product_id in products_with_variants:
+            return _pending_line(line, ReviewReason.FALTA_VARIANTE, product_id=line.product_id)
+        # Sin ids: uno inventado violaría la llave foránea al guardar en PostgreSQL.
+        return _pending_line(line, ReviewReason.NO_RECONOCIDO)
+    if line.quantity is not None and not _is_valid_quantity(line.quantity):
+        return _pending_line(
+            line,
+            ReviewReason.CANTIDAD_INVALIDA,
+            product_id=item.product_id,
+            variant_id=item.variant_id,
+        )
     return LineDraft(
         customer_text=line.customer_text,
         product_id=item.product_id,
@@ -95,6 +111,32 @@ def _line_from(
         label=item.label,
         unit_price=item.unit_price,
     )
+
+
+def _pending_line(
+    line: ExtractedLine,
+    reason: ReviewReason,
+    *,
+    product_id: int | None = None,
+    variant_id: int | None = None,
+) -> LineDraft:
+    """Línea «Por revisar»: el texto del cliente, su motivo y nunca un precio (research.md R5)."""
+    valid_quantity = line.quantity is not None and _is_valid_quantity(line.quantity)
+    return LineDraft(
+        customer_text=line.customer_text,
+        product_id=product_id,
+        variant_id=variant_id,
+        quantity=line.quantity if valid_quantity else None,
+        quantity_assumed=False,
+        status=LineStatus.POR_REVISAR,
+        review_reason=reason,
+        label=None,
+        unit_price=None,
+    )
+
+
+def _is_valid_quantity(quantity: int) -> bool:
+    return 1 <= quantity <= MAX_QUANTITY
 
 
 async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan para las pruebas)
@@ -132,6 +174,12 @@ async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan pa
     extraction = result.output
     delivery_date, date_needs_review = resolve_delivery_date(extraction.delivery_date, today)
     delivery_time, time_needs_review = resolve_delivery_time(extraction.delivery_time)
+    delivery_address = (extraction.delivery_address or "").strip() or None
+    delivery_mode: str | None = extraction.delivery_mode
+    # Una dirección sin modalidad: se supone domicilio y el dueño lo confirma (data-model.md).
+    mode_needs_review = delivery_address is not None and delivery_mode is None
+    if mode_needs_review:
+        delivery_mode = DeliveryMode.DOMICILIO
     quote = Quote(
         status=QuoteStatus.BORRADOR,
         customer_message=text,
@@ -142,8 +190,9 @@ async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan pa
         delivery_date_needs_review=date_needs_review,
         delivery_time=delivery_time,
         delivery_time_needs_review=time_needs_review,
-        delivery_mode=extraction.delivery_mode,
-        delivery_address=extraction.delivery_address,
+        delivery_mode=delivery_mode,
+        delivery_mode_needs_review=mode_needs_review,
+        delivery_address=delivery_address,
         lines=[
             QuoteLine(position=position, **draft.model_dump())
             for position, draft in enumerate(build_lines(extraction, items), start=1)

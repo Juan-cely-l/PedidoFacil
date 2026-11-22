@@ -14,6 +14,7 @@ from sqlmodel import Session
 
 from app.config import Settings, get_app_settings
 from app.db import get_session
+from app.models.quote import ReviewReason
 from app.services import quotes
 from app.services.catalog import list_quotable_items
 from app.services.quote_ai import QuoteExtraction
@@ -22,6 +23,11 @@ from app.templating import COLOMBIA, templates
 QUOTE_NOT_FOUND_MESSAGE = "La cotización no existe"
 EMPTY_MESSAGE = "Pega el mensaje del cliente"
 TOO_LONG_MESSAGE = "El mensaje es demasiado largo (máximo 2.000 caracteres)"
+REVIEW_REASON_LABELS = {
+    ReviewReason.NO_RECONOCIDO: "No está en el catálogo",
+    ReviewReason.FALTA_VARIANTE: "Falta la presentación",
+    ReviewReason.CANTIDAD_INVALIDA: "Cantidad no válida",
+}
 
 router = APIRouter(prefix="/cotizaciones", tags=["cotizaciones"])
 
@@ -134,9 +140,25 @@ def quote_detail(request: Request, session: SessionDep, quote_id: int) -> HTMLRe
         quote = quotes.get_quote(session, quote_id)
     except quotes.QuoteNotFoundError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, QUOTE_NOT_FOUND_MESSAGE) from error
-    lines = [{"line": line, "subtotal": quotes.line_subtotal(line)} for line in quote.lines]
+    lines = [
+        {
+            "line": line,
+            "subtotal": quotes.line_subtotal(line),
+            "reason": (
+                REVIEW_REASON_LABELS[ReviewReason(line.review_reason)]
+                if line.review_reason
+                else None
+            ),
+        }
+        for line in quote.lines
+    ]
     return templates.TemplateResponse(
         request,
         "quotes/detail.html",
-        {"quote": quote, "lines": lines, "total": quotes.quote_total(quote)},
+        {
+            "quote": quote,
+            "lines": lines,
+            "total": quotes.quote_total(quote),
+            "pending": quotes.pending_count(quote),
+        },
     )

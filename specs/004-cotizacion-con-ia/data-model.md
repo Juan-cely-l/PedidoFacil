@@ -20,7 +20,7 @@ de entrega como `date` local de Colombia.
 | `delivery_time` | time, nulo | Normalizada por el código (research R7b). |
 | `delivery_time_needs_review` | bool | El cliente mencionó una hora que no se pudo normalizar con seguridad, o una hora de 1 a 6 sin «mañana» ni «tarde». |
 | `delivery_mode` | texto (≤ 10), nulo | `CHECK IN ('domicilio','recoger')` |
-| `delivery_mode_needs_review` | bool | Hay dirección pero el cliente no dijo la modalidad: se asume `domicilio` y se marca. |
+| `delivery_mode_needs_review` | bool | Hay dirección pero el cliente no dijo la modalidad: se asume `domicilio` y se marca. Una dirección vacía no cuenta. |
 | `delivery_address` | texto (≤ 200), nulo | |
 
 Se calculan al leer, no se guardan:

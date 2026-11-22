@@ -237,9 +237,9 @@ Después, commit `test(PED-16): pruebas de líneas por revisar`.
 
 ### Implementación de la Historia 2 (verde)
 
-- [ ] T032 [US2] Completar `build_lines` en `app/services/quotes.py` con todas las filas de la tabla de research R5, y en `quote_message` las marcas de fecha y modalidad de data-model.md.
-- [ ] T033 [P] [US2] En `app/templates/quotes/detail.html` y `list.html`: insignia, motivo, avisos de pendientes y «Por confirmar», según contracts/quote-pages.md.
-- [ ] T034 [US2] Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): marcar para revisión lo que la IA no reconoce`.
+- [x] T032 [US2] Completar `build_lines` en `app/services/quotes.py` con todas las filas de la tabla de research R5, y en `quote_message` las marcas de fecha y modalidad de data-model.md.
+- [x] T033 [P] [US2] En `app/templates/quotes/detail.html` y `list.html`: insignia, motivo, avisos de pendientes y «Por confirmar», según contracts/quote-pages.md.
+- [x] T034 [US2] Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): marcar para revisión lo que la IA no reconoce`.
 
 **Punto de control**: `build_lines` está completa. La medición (Fase 7) ya puede correr, en
 paralelo con las Historias 3 y 4.

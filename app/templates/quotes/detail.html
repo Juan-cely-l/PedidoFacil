@@ -4,6 +4,7 @@
 <hgroup>
   <h1>Cotización n.º {{ quote.id }}</h1>
   <p>{{ quote.status | capitalize }} · creada el {{ quote.created_at | colombia }}</p>
+  {% if pending %}<p><mark>Incompleta: {{ pending }} línea(s) por revisar</mark></p>{% endif %}
 </hgroup>
 
 <article>
@@ -21,6 +22,15 @@
     <tbody>
       {% for row in lines %}
       <tr>
+        {% if row.reason %}
+        <td>
+          <mark>Por revisar</mark> {{ row.reason }}
+          {% if row.line.customer_text %}<br><q>{{ row.line.customer_text }}</q>{% endif %}
+        </td>
+        <td>{{ row.line.quantity or "—" }}</td>
+        <td>—</td>
+        <td>—</td>
+        {% else %}
         <td>{{ row.line.label }}</td>
         <td>
           {{ row.line.quantity }}
@@ -28,11 +38,18 @@
         </td>
         <td>{{ row.line.unit_price | cop }}</td>
         <td>{{ row.subtotal | cop }}</td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>
     <tfoot>
-      <tr><th colspan="3">Total</th><th>{{ total | cop }}</th></tr>
+      <tr>
+        <th colspan="3">
+          Total
+          {% if pending %}<br><small>No incluye las líneas por revisar</small>{% endif %}
+        </th>
+        <th>{{ total | cop }}</th>
+      </tr>
     </tfoot>
   </table>
 </div>
@@ -43,11 +60,20 @@
 <h2>Entrega</h2>
 <dl>
   <dt>Fecha</dt>
-  <dd>{{ quote.delivery_date.strftime("%d/%m/%Y") if quote.delivery_date else "Sin fecha" }}</dd>
+  <dd>
+    {{ quote.delivery_date.strftime("%d/%m/%Y") if quote.delivery_date else "Sin fecha" }}
+    {% if quote.delivery_date_needs_review %}<mark>Por confirmar</mark>{% endif %}
+  </dd>
   <dt>Hora</dt>
-  <dd>{{ quote.delivery_time.strftime("%H:%M") if quote.delivery_time else "Sin hora" }}</dd>
+  <dd>
+    {{ quote.delivery_time.strftime("%H:%M") if quote.delivery_time else "Sin hora" }}
+    {% if quote.delivery_time_needs_review %}<mark>Por confirmar</mark>{% endif %}
+  </dd>
   <dt>Modalidad</dt>
-  <dd>{{ quote.delivery_mode | capitalize if quote.delivery_mode else "Sin modalidad" }}</dd>
+  <dd>
+    {{ quote.delivery_mode | capitalize if quote.delivery_mode else "Sin modalidad" }}
+    {% if quote.delivery_mode_needs_review %}<mark>Por confirmar</mark>{% endif %}
+  </dd>
   <dt>Dirección</dt>
   <dd>{{ quote.delivery_address or "Sin dirección" }}</dd>
 </dl>

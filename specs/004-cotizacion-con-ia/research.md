@@ -161,9 +161,11 @@ variantes y cantidades correctos).
   | Un producto con variantes activas y sin `variant_id` | «Por revisar», motivo `falta_variante`, con el producto ya puesto |
   | Un `variant_id` que no es una variante activa de ese producto | «Por revisar», motivo `no_reconocido` |
   | Una cantidad ausente | Cantidad 1, línea «Lista» con `quantity_assumed`, para que el dueño la confirme |
-  | Una cantidad no entera positiva | «Por revisar», motivo `cantidad_invalida` |
+  | Una cantidad fuera de 1 a 999 (el `CHECK` de la tabla) | «Por revisar», motivo `cantidad_invalida`, con el producto y la variante puestos y la cantidad nula |
   | Un ítem cotizable válido | Línea «Lista», con `unit_price` y `label` copiados de su `QuotableItem` |
 
+- **Si fallan el producto y la cantidad**, manda el motivo del producto. Una línea
+  `no_reconocido` se guarda **sin ids**: uno inventado violaría la llave foránea en PostgreSQL.
 - **Por qué ids y no nombres**: comparar nombres en código reintroduce ambigüedad («torta» frente
   a «torta de chocolate»). Con ids, la IA hace la asociación difícil y el código solo verifica que
   el id exista, que es exacto y probable.
