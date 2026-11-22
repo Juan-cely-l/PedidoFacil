@@ -60,6 +60,20 @@ pydantic-ai se verificó en el código fuente de `pydantic-ai-slim` 2.71.0, la �
   ([contracts/configuration.md](contracts/configuration.md)). Si la medición indica otra cosa, se
   cambia la variable en Render y se redespliega.
 
+### Sesgo conocido, anotado el 2026-11-22 antes de ver los datos
+
+`thinking=False` **no apaga el razonamiento en Gemini 3**: pydantic-ai lo traduce al nivel más bajo
+que admite cada modelo. Envía `MINIMAL` a `gemini-3.5-flash-lite` y `gemini-3.5-flash`, y `LOW` a
+`gemini-3.8-flash`.
+
+- **Efecto esperado**: 3.8 compite con algo más de razonamiento, así que probablemente salga
+  **más lento y más preciso** que los 3.5. La comparación no es a igual razonamiento.
+- **Cómo se lee el resultado**: una diferencia de latencia o de acierto a favor o en contra de 3.8
+  no se puede atribuir solo al modelo. La regla de elección no cambia por esto: es el nivel con el
+  que la app lo usaría de verdad.
+- **Corrige una lectura anterior de este plan**: donde R2 dice «apagar el razonamiento», debe
+  entenderse «reducirlo al mínimo que admite el modelo».
+
 ### Cómo se vuelve a medir (antes del merge y cada vez que se dude)
 
 Se usa `scripts/medir_gemini.py`, un script manual. Llama a la API real con `GEMINI_API_KEY`; no
