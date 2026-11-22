@@ -339,10 +339,10 @@ desde `tests/` ni desde la CI.
 (T032). Corre a la par de las Fases 5 y 6. Su resultado solo cambia variables de entorno; no toca
 el código.
 
-- [ ] T050 Escribir `scripts/medir_gemini.py`, que se ejecuta con `uv run --no-sync python -m scripts.medir_gemini --franja {manana,tarde}`:
+- [x] T050 Escribir `scripts/medir_gemini.py`, que se ejecuta con `uv run --no-sync python -m scripts.medir_gemini --franja {manana,tarde}`:
   - Importa `CATALOGOS`, `MENSAJES` y `puntuar` de `tests/banco_mensajes.py` y cotiza cada mensaje contra `CATALOGOS[caso.negocio]`; y `build_quote_agent`, `render_catalog_prompt` y `build_lines` de la app: mide la cadena real, no una copia.
   - Para cada uno de `gemini-3.5-flash-lite`, `gemini-3.5-flash` y `gemini-3.8-flash`, sin respaldo, con `max_retries=0`, 30 s de tiempo de espera y razonamiento apagado, envía cada mensaje del banco una vez, con 5 s entre peticiones.
-  - Agrega a `specs/004-cotizacion-con-ia/mediciones.csv` una fila por petición: fecha, franja, modelo, id del mensaje, duración en ms, resultado (`ok`, `timeout`, `provider_error` o `invalid_output`), esperados, correctos y sobrantes. **Nunca el texto del mensaje.**
+  - Agrega a `specs/004-cotizacion-con-ia/mediciones.csv` una fila por petición: fecha, franja, modelo, id del mensaje, duración en ms, resultado (`ok`, `timeout`, `provider_error` o `invalid_output`), código HTTP del error, esperados, correctos y sobrantes. **Nunca el texto del mensaje.**
   - Al final, imprime por modelo: porcentaje de respuestas válidas en 10 s o menos, p50, p95 y acierto global sobre las respuestas válidas (sumando correctos, esperados y sobrantes de todo el banco, research R14), además de la procedencia: cuántos casos E01, E02 e inventados.
   - Lee la clave de `GEMINI_API_KEY` del entorno y se niega a correr sin ella. No tiene pruebas automáticas: lo que mide ya está probado, y el script es manual (research R2).
   - Commit `chore(PED-16): script de medición de modelos con el banco de mensajes`.

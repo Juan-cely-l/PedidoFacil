@@ -72,19 +72,25 @@ variantes y cantidades correctos).
    12 mensajes como mínimo, cada uno con su resultado esperado, y el catálogo fijo de su
    negocio.
 2. **Candidatos**: `gemini-3.5-flash-lite`, `gemini-3.5-flash` y `gemini-3.8-flash`, los tres con
-   `thinking=False`, que es como los usa la app.
+   `thinking=False`, que es como los usa la app. En Gemini 3 eso es el nivel más bajo que admite
+   cada modelo, no un apagado: pydantic-ai envía `MINIMAL` a los dos 3.5 y `LOW` a 3.8 (comprobado
+   sin red el 2026-11-22).
 3. **Condiciones**: `max_retries=0`, sin respaldo y con 30 s de tiempo de espera, para medir el
    tiempo real aunque supere el límite de la app.
 4. **Muestra**: cada mensaje del banco una vez por modelo, en **dos franjas del mismo día**
    (mañana y tarde, hora de Colombia). Con los 17 mensajes actuales son 3 × 17 × 2 = 102
    peticiones. Una petición cada 5 s,
-   para no confundir la latencia con el límite de peticiones por minuto. Cada franja tarda menos
+   para no confundir la latencia con el límite de peticiones por minuto, y con los modelos
+   **intercalados**: cada uno recibe como mucho 4 peticiones por minuto. Cada franja tarda menos
    de una hora.
 5. **Registro**: por petición, el modelo, la franja, el id del mensaje, la duración, el resultado
    (`ok`, `timeout`, `provider_error` o `invalid_output`) y, si respondió, los ítems esperados,
    los correctos y los sobrantes (R14). Se guarda en `specs/004-cotizacion-con-ia/mediciones.csv`,
-   sin el texto de los mensajes. Al final, el script imprime por modelo: porcentaje de respuestas
-   válidas en 10 s o menos, p50, p95 y porcentaje de acierto.
+   sin el texto de los mensajes, con `codigo_http` para distinguir un 429 de cuota de un fallo del
+   modelo. Al final, el script imprime por modelo: porcentaje de respuestas válidas en 10 s o menos
+   (sobre todas sus peticiones), p50, p95 y porcentaje de acierto. Los percentiles son por rango
+   más cercano y sobre las respuestas válidas (precisado el 2026-11-22, antes de medir): los
+   fallos ya cuentan en contra en el primer porcentaje, y un error rápido no debe bajar el p95.
 6. **Regla de elección**, fijada el 2026-11-21, antes de ver los datos:
    - gana el modelo con **mayor porcentaje de respuestas válidas en 10 s o menos**, contando las
      dos franjas;

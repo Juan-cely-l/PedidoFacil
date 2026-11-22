@@ -55,8 +55,13 @@ Qué tiene que pasar:
 No bloquea el desarrollo: se corre en paralelo, en cuanto existen el banco y el agente.
 
 ```bash
+read -rsp "GEMINI_API_KEY: " GEMINI_API_KEY; echo; export GEMINI_API_KEY   # sin dejarla en el historial
 uv run --no-sync python -m scripts.medir_gemini --franja manana   # y luego --franja tarde
+unset GEMINI_API_KEY
 ```
+
+Antes, revisa en AI Studio la cuota del proyecto: cada modelo necesita al menos 4 peticiones por
+minuto y 34 al día, más algún reintento de validación.
 
 Sigue el protocolo de [research.md R2](research.md#cómo-se-vuelve-a-medir-antes-del-merge-y-cada-vez-que-se-dude):
 - **Muestra**: los 12 o más mensajes del banco (R14) con los 3 modelos, en dos franjas del mismo
