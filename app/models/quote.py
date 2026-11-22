@@ -7,6 +7,7 @@ total no se guardan, se calculan al leer (research.md R9). Ningún precio sale d
 import datetime
 from enum import StrEnum
 
+from pydantic import BaseModel
 from sqlalchemy import CheckConstraint, Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -143,3 +144,13 @@ class QuoteLine(SQLModel, table=True):
     quantity_assumed: bool = False
 
     quote: Quote | None = Relationship(back_populates="lines")
+
+
+class LineInput(BaseModel):
+    """Una línea que el dueño arma a mano: ítem cotizable y cantidad, nunca un precio (FR-014).
+
+    Esqueleto de la Historia 3: todavía no valida.
+    """
+
+    item: str
+    quantity: int

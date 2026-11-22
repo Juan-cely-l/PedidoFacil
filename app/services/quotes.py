@@ -19,6 +19,7 @@ from app.models.quote import (
     MESSAGE_MAX_LENGTH,
     AiOutcome,
     DeliveryMode,
+    LineInput,
     LineStatus,
     Quote,
     QuoteLine,
@@ -68,6 +69,10 @@ class NothingToQuoteError(Exception):
 
 class QuoteNotFoundError(Exception):
     """La cotización no existe."""
+
+
+class ItemNotQuotableError(Exception):
+    """El ítem elegido no es cotizable hoy."""
 
 
 def build_lines(extraction: QuoteExtraction, items: list[QuotableItem]) -> list[LineDraft]:
@@ -232,3 +237,8 @@ def quote_total(quote: Quote) -> int:
 def pending_count(quote: Quote) -> int:
     """Número de líneas «Por revisar»."""
     return sum(1 for line in quote.lines if line.status == LineStatus.POR_REVISAR)
+
+
+def add_line(session: Session, quote_id: int, data: LineInput) -> QuoteLine:
+    """Agrega a mano una línea lista, con el precio vigente del catálogo."""
+    raise NotImplementedError

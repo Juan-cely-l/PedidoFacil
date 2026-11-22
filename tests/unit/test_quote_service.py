@@ -6,22 +6,39 @@ catálogo de referencia, nunca de la extracción simulada, que no puede traerlos
 
 import asyncio
 import datetime
+import time
 
 import pytest
+from pydantic import ValidationError
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import (
+    ContentFilterError,
+    ModelAPIError,
+    ModelHTTPError,
+    ModelRequestTimeout,
+    ModelTimeoutError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
+from pydantic_ai.models.fallback import FallbackModel
 from sqlmodel import Session
 
 from app.models.catalog import Product, ProductVariant
-from app.models.quote import AiOutcome, LineStatus, Quote, QuoteStatus, ReviewReason
+from app.models.quote import AiOutcome, LineInput, LineStatus, Quote, QuoteStatus, ReviewReason
 from app.services import quotes
+from app.services.quote_ai import QuoteExtraction
 from tests.banco_mensajes import MENSAJES
 from tests.doubles import (
     EMPTY_EXTRACTION,
     ReferenceCatalog,
     ScriptedModel,
     extraction_model,
+    failing_model,
     line_payload,
     quote_agent,
+    raising_model,
     seed_reference_catalog,
+    slow_model,
 )
 
 TODAY = datetime.date(2026, 11, 18)  # miércoles
@@ -439,3 +456,298 @@ def test_una_direccion_con_recoger_respeta_lo_que_dijo_el_cliente(
 
     assert quote.delivery_mode == "recoger"
     assert quote.delivery_mode_needs_review is False
+
+
+# Historia 3: el camino manual (research R3 y R4, SC-002)
+
+MESSAGE = "un cafe pa mañana"
+
+
+def _cotizar(
+    session: Session, extractor: Agent[None, QuoteExtraction] | None, timeout: float = 10
+) -> Quote:
+    return asyncio.run(
+        quotes.quote_message(
+            session,
+            MESSAGE,
+            extractor=extractor,
+            timeout_seconds=timeout,
+            today=TODAY,
+            now=NOW,
+        )
+    )
+
+
+def _assert_manual_draft(quote: Quote, outcome: AiOutcome) -> None:
+    assert quote.id is not None
+    assert quote.status == QuoteStatus.BORRADOR
+    assert quote.ai_outcome == outcome
+    assert quote.customer_message == MESSAGE
+    assert quote.lines == []
+    assert quotes.quote_total(quote) == 0
+    assert quote.delivery_date is None
+    assert quote.delivery_time is None
+    assert quote.delivery_mode is None
+    assert quote.delivery_address is None
+
+
+def test_si_la_ia_tarda_se_corta_a_tiempo_y_queda_el_borrador_manual(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    started = time.monotonic()
+
+    quote = _cotizar(session, quote_agent(slow_model(1)), timeout=0.05)
+
+    assert time.monotonic() - started < 0.5
+    _assert_manual_draft(quote, AiOutcome.TIMEOUT)
+    assert quote.ai_duration_ms is not None
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(ModelHTTPError(503, "modelo-falso"), id="503_saturado"),
+        pytest.param(ModelHTTPError(429, "modelo-falso"), id="429_cuota"),
+        pytest.param(ModelHTTPError(401, "modelo-falso"), id="401_clave"),
+        pytest.param(ModelAPIError("modelo-falso", "sin red"), id="red"),
+        pytest.param(ModelTimeoutError("modelo-falso", "lectura"), id="lectura_http"),
+        pytest.param(ModelRequestTimeout("modelo-falso", 10), id="request_timeout"),
+    ],
+)
+def test_un_error_del_proveedor_deja_el_borrador_manual(
+    session: Session, ref: ReferenceCatalog, error: Exception
+) -> None:
+    quote = _cotizar(session, quote_agent(raising_model(error)))
+
+    _assert_manual_draft(quote, AiOutcome.PROVIDER_ERROR)
+    assert quote.ai_duration_ms is not None
+
+
+def _validation_error() -> ValidationError:
+    with pytest.raises(ValidationError) as caught:
+        QuoteExtraction.model_validate({"lines": "no es una lista"})
+    return caught.value
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(UnexpectedModelBehavior("respuesta rara"), id="inesperada"),
+        pytest.param(ContentFilterError("filtrada"), id="filtro_de_contenido"),
+        pytest.param(UsageLimitExceeded("limite"), id="otro_agent_run_error"),
+        pytest.param(_validation_error(), id="validation_error"),
+    ],
+)
+def test_una_respuesta_inutilizable_deja_el_borrador_manual(
+    session: Session, ref: ReferenceCatalog, error: Exception
+) -> None:
+    quote = _cotizar(session, quote_agent(raising_model(error)))
+
+    _assert_manual_draft(quote, AiOutcome.INVALID_OUTPUT)
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        pytest.param({"price": 0}, id="precio_cero"),
+        pytest.param({"unit_price": 1000}, id="precio_unitario"),
+        pytest.param({"quantity": "muchas"}, id="tipo_invalido"),
+    ],
+)
+def test_una_salida_invalida_no_deja_precios_ni_lineas_parciales(
+    session: Session, ref: ReferenceCatalog, invalid: dict[str, object]
+) -> None:
+    valid_line = line_payload(ref.cafe_id, None, 1)
+    model = _model(valid_line, {**line_payload(ref.torta_id, ref.mediana_id, 1), **invalid})
+
+    quote = _cotizar(session, quote_agent(model))
+
+    _assert_manual_draft(quote, AiOutcome.INVALID_OUTPUT)  # la línea válida tampoco se rescata
+    assert model.calls == 2  # un solo reintento de validación
+
+
+def test_si_el_principal_falla_responde_el_respaldo(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    backup = _model(line_payload(ref.cafe_id, None, 1))
+    agent = quote_agent(_model())
+
+    chain = FallbackModel(failing_model(503), backup, fallback_on=(ModelHTTPError,))
+    with agent.override(model=chain):
+        quote = _cotizar(session, agent)
+
+    assert quote.ai_outcome == AiOutcome.OK
+    assert [line.unit_price for line in quote.lines] == [3500]
+
+
+def test_si_fallan_el_principal_y_el_respaldo_queda_el_borrador_manual(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    # pydantic-ai lanza un FallbackExceptionGroup, que no es un AgentRunError: con solo las
+    # excepciones de research R4, justo la congestión daría un 500 en producción.
+    agent = quote_agent(_model())
+
+    chain = FallbackModel(failing_model(503), failing_model(429), fallback_on=(ModelHTTPError,))
+    with agent.override(model=chain):
+        quote = _cotizar(session, agent)
+
+    _assert_manual_draft(quote, AiOutcome.PROVIDER_ERROR)
+
+
+def test_el_respaldo_comparte_el_reloj_del_principal(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    agent = quote_agent(_model())
+
+    chain = FallbackModel(failing_model(503), slow_model(1), fallback_on=(ModelHTTPError,))
+    with agent.override(model=chain):
+        quote = _cotizar(session, agent, timeout=0.2)
+
+    _assert_manual_draft(quote, AiOutcome.TIMEOUT)
+
+
+def test_con_la_ia_desactivada_queda_el_borrador_manual_sin_duracion(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    quote = _cotizar(session, None)
+
+    _assert_manual_draft(quote, AiOutcome.DISABLED)
+    assert quote.ai_duration_ms is None
+
+
+@pytest.mark.parametrize("error", [TypeError("bug"), KeyError("bug"), RuntimeError("bug")])
+def test_un_error_de_programacion_no_se_disfraza_de_falla_de_la_ia(
+    session: Session, ref: ReferenceCatalog, error: Exception
+) -> None:
+    # RuntimeError importa: es la base de AgentRunError y lo que lanza el bloqueo de red.
+    with pytest.raises(type(error)):
+        _cotizar(session, quote_agent(raising_model(error)))
+
+    assert quotes.list_quotes(session) == []
+
+
+def test_un_error_al_armar_las_lineas_no_se_disfraza_de_falla_de_la_ia(
+    session: Session, ref: ReferenceCatalog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Un ValidationError de nuestro código no es una salida inválida de la IA.
+    error = _validation_error()
+
+    def broken(*_args: object) -> None:
+        raise error
+
+    monkeypatch.setattr(quotes, "build_lines", broken)
+
+    with pytest.raises(ValidationError):
+        _cotizar(session, quote_agent(_model()))
+
+
+# Agregar una línea a mano (T036)
+
+
+@pytest.fixture
+def draft_id(session: Session, ref: ReferenceCatalog) -> int:
+    quote = _cotizar(session, quote_agent(_model()))
+    assert quote.id is not None
+    return quote.id
+
+
+def test_agregar_una_linea_toma_la_etiqueta_y_el_precio_del_catalogo(
+    session: Session, ref: ReferenceCatalog, draft_id: int
+) -> None:
+    data = LineInput(item=f"{ref.torta_id}:{ref.mediana_id}", quantity=2)
+
+    line = quotes.add_line(session, draft_id, data)
+
+    assert line.id is not None
+    assert (line.status, line.review_reason) == (LineStatus.LISTA, None)
+    assert (line.product_id, line.variant_id) == (ref.torta_id, ref.mediana_id)
+    assert line.label == "Torta de chocolate — Tamaño: Mediana"
+    assert (line.unit_price, line.quantity, line.quantity_assumed) == (45000, 2, False)
+    assert line.customer_text is None
+    assert line.position == 1
+    assert quotes.quote_total(quotes.get_quote(session, draft_id)) == 90000
+
+
+def test_agregar_una_linea_usa_el_precio_vigente(
+    session: Session, ref: ReferenceCatalog, draft_id: int
+) -> None:
+    cafe = session.get(Product, ref.cafe_id)
+    assert cafe is not None
+    cafe.price = 4000
+    session.add(cafe)
+    session.commit()
+
+    line = quotes.add_line(session, draft_id, LineInput(item=str(ref.cafe_id), quantity=1))
+
+    assert (line.variant_id, line.unit_price) == (None, 4000)
+
+
+def test_una_linea_agregada_queda_al_final_aunque_se_haya_quitado_otra(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    quote = _cotizar(
+        session,
+        quote_agent(_model(line_payload(ref.cafe_id, None, 1), line_payload(None, None, 1))),
+    )
+    assert quote.id is not None
+    session.delete(quote.lines[0])  # queda solo la posición 2
+    session.commit()
+    session.refresh(quote)
+
+    line = quotes.add_line(session, quote.id, LineInput(item=str(ref.cafe_id), quantity=1))
+
+    assert line.position == 3
+
+
+@pytest.mark.parametrize(
+    "choice",
+    ["inexistente", "sin_variante", "variante_de_otro", "producto_inactivo", "variante_inactiva"],
+)
+def test_no_se_agrega_un_item_que_no_es_cotizable(
+    session: Session, ref: ReferenceCatalog, draft_id: int, choice: str
+) -> None:
+    cafe = session.get(Product, ref.cafe_id)
+    grande = session.get(ProductVariant, ref.grande_id)
+    assert cafe is not None
+    assert grande is not None
+    cafe.is_active = grande.is_active = False
+    session.add_all([cafe, grande])
+    session.commit()
+    item = {
+        "inexistente": "9999",
+        "sin_variante": str(ref.torta_id),
+        "variante_de_otro": f"{ref.cafe_id}:{ref.mediana_id}",
+        "producto_inactivo": str(ref.cafe_id),
+        "variante_inactiva": f"{ref.torta_id}:{ref.grande_id}",
+    }[choice]
+
+    with pytest.raises(quotes.ItemNotQuotableError):
+        quotes.add_line(session, draft_id, LineInput(item=item, quantity=1))
+
+    assert quotes.get_quote(session, draft_id).lines == []
+
+
+def test_no_se_agrega_una_linea_a_una_cotizacion_inexistente(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    with pytest.raises(quotes.QuoteNotFoundError):
+        quotes.add_line(session, 999, LineInput(item=str(ref.cafe_id), quantity=1))
+
+
+@pytest.mark.parametrize("quantity", ["0", "-1", "1000", "2.5", "muchas", ""])
+def test_la_linea_manual_rechaza_una_cantidad_fuera_de_1_a_999(quantity: str) -> None:
+    with pytest.raises(ValidationError):
+        LineInput.model_validate({"item": "1", "quantity": quantity})
+
+
+@pytest.mark.parametrize("item", ["", "cafe", "1:", ":2", "1:2:3", "-1", "1:dos", "1.5"])
+def test_la_linea_manual_rechaza_un_item_con_otro_formato(item: str) -> None:
+    with pytest.raises(ValidationError):
+        LineInput.model_validate({"item": item, "quantity": "1"})
+
+
+@pytest.mark.parametrize(("item", "quantity"), [("1", "1"), ("1:102", "999")])
+def test_la_linea_manual_acepta_los_dos_formatos_de_item(item: str, quantity: str) -> None:
+    data = LineInput.model_validate({"item": item, "quantity": quantity})
+
+    assert (data.item, data.quantity) == (item, int(quantity))

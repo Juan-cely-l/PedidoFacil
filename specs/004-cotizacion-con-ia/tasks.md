@@ -257,7 +257,7 @@ y el dueño agrega una línea a mano.
 
 ### Pruebas de la Historia 3 (rojo) ⚠️
 
-- [ ] T035 [P] [US3] Ampliar `tests/unit/test_quote_service.py` con las fallas (research R3–R4, SC-002):
+- [x] T035 [P] [US3] Ampliar `tests/unit/test_quote_service.py` con las fallas (research R3–R4, SC-002):
   - **Tiempo agotado**: `timeout_seconds=0.05` con `slow_model(1)` da `ai_outcome="timeout"`, sin líneas, con el mensaje guardado, y la llamada dura menos de 0,5 s.
   - **Error del proveedor**: `failing_model(503)` y `failing_model(429)` dan `provider_error`.
   - **Salida con precio (SC-003)**: una respuesta con `"price": 0` en una línea da `invalid_output` y ninguna línea; ningún `unit_price` de la cotización viene de la IA.
@@ -265,16 +265,16 @@ y el dueño agrega una línea a mano.
   - **Respaldo**: con `agent.override(model=FallbackModel(failing_model(503), extraction_model(…), fallback_on=(ModelHTTPError,)))` el resultado es `ok`, con líneas.
   - **IA desactivada**: `extractor=None` da `disabled`, sin líneas y con `ai_duration_ms` nulo.
   - **Errores de programación**: un `FunctionModel` que lanza `TypeError` no se convierte en borrador: `pytest.raises(TypeError)`.
-- [ ] T036 [P] [US3] Ampliar `tests/unit/test_quote_service.py` con `add_line(session, quote_id, LineInput)`: en un borrador sin líneas, `item="<pid>:<vid>"` y `quantity=2` crean una línea `lista` con la etiqueta y el precio vigentes, y el total se recalcula; un ítem ya no cotizable lanza `ItemNotQuotableError`; una cotización inexistente lanza `QuoteNotFoundError`. `LineInput` rechaza `quantity` fuera de «entero de 1 a 999» y un `item` que no sea `"<product_id>"` ni `"<product_id>:<variant_id>"`.
-- [ ] T037 [P] [US3] Prueba en `tests/integration/test_quote_logs.py` (nuevo), research R11, SC-006:
+- [x] T036 [P] [US3] Ampliar `tests/unit/test_quote_service.py` con `add_line(session, quote_id, LineInput)`: en un borrador sin líneas, `item="<pid>:<vid>"` y `quantity=2` crean una línea `lista` con la etiqueta y el precio vigentes, y el total se recalcula; un ítem ya no cotizable lanza `ItemNotQuotableError`; una cotización inexistente lanza `QuoteNotFoundError`. `LineInput` rechaza `quantity` fuera de «entero de 1 a 999» y un `item` que no sea `"<product_id>"` ni `"<product_id>:<variant_id>"`.
+- [x] T037 [P] [US3] Prueba en `tests/integration/test_quote_logs.py` (nuevo), research R11, SC-006:
   - Con éxito y con cada falla (tiempo agotado, 503, salida inválida), un mensaje con `MENSAJE-CENTINELA` y `DIRECCION-CENTINELA` no aparece en `caplog` ni en el texto de las excepciones registradas.
   - Cada falla deja un `WARNING` en `pedidofacil.quotes` con el resultado, el nombre del tipo de la excepción y la duración en ms.
   - El éxito deja una línea `INFO` con el id de la cotización, el resultado, la duración, el número de líneas y el número «Por revisar».
-- [ ] T038 [P] [US3] Ampliar `tests/integration/test_quote_pages.py`:
+- [x] T038 [P] [US3] Ampliar `tests/integration/test_quote_pages.py`:
   - Para cada `ai_outcome` distinto de `ok`, `POST /cotizaciones` responde `303` y el detalle muestra el aviso exacto de contracts/quote-pages.md, sin detalles técnicos («503», «Timeout», nombres de excepciones).
   - `POST /cotizaciones/{id}/lineas` con `item` y `quantity` válidos responde `303` y el detalle muestra la línea con su precio; cantidad `0` → `422` con «La cantidad debe ser un número entero entre 1 y 999»; ítem ya no cotizable → `422` con «Ese producto ya no está disponible en el catálogo»; cotización inexistente → `404`.
   - El formulario «Agregar producto» es un `<select>` con los ítems de `list_quotable_items` y un campo de cantidad.
-- [ ] T039 [US3] Esqueletos con `raise NotImplementedError`: `add_line`, `ItemNotQuotableError` y el modelo `LineInput` en `app/models/quote.py`; la ruta `POST /cotizaciones/{id}/lineas` en `app/routers/quotes.py`.
+- [x] T039 [US3] Esqueletos con `raise NotImplementedError`: `add_line`, `ItemNotQuotableError` y el modelo `LineInput` en `app/models/quote.py`; la ruta `POST /cotizaciones/{id}/lineas` en `app/routers/quotes.py`.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 3.** Ejecutar `uv run pytest`, mostrar que
 cada prueba nueva falla por la razón esperada, detenerse y esperar la aprobación del autor.

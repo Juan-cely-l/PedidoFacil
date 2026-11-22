@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app.models.catalog import Product
 from app.models.quote import AiOutcome, LineStatus, Quote, QuoteLine, ReviewReason
 from app.routers.quotes import get_quote_extractor
 from tests.doubles import (
@@ -22,10 +23,12 @@ from tests.doubles import (
     ReferenceCatalog,
     ScriptedModel,
     extraction_model,
+    failing_model,
     line_payload,
     log_in,
     quote_agent,
     seed_reference_catalog,
+    slow_model,
 )
 
 QUOTE_URL = re.compile(r"/cotizaciones/(\d+)$")
@@ -438,3 +441,192 @@ def test_la_lista_dice_cuantas_lineas_faltan_por_revisar(
     (incomplete_item,) = [item for item in items if f'/cotizaciones/{incomplete}"' in item]
     assert "2 por revisar" in incomplete_item
     assert "por revisar" not in complete_item
+
+
+# Historia 3: camino manual
+
+NOTICES = {
+    AiOutcome.TIMEOUT: "La IA no respondió a tiempo: agrega los productos a mano",
+    AiOutcome.PROVIDER_ERROR: (
+        "La IA no está disponible en este momento: agrega los productos a mano"
+    ),
+    AiOutcome.INVALID_OUTPUT: "La IA no entregó una respuesta válida: agrega los productos a mano",
+    AiOutcome.DISABLED: "La IA está desactivada en este ambiente: agrega los productos a mano",
+}
+
+
+@pytest.fixture
+def short_timeout(auth_app: FastAPI, use_model: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = auth_app.state.settings.model_copy(update={"ai_timeout_seconds": 0.2})
+    monkeypatch.setattr(auth_app.state, "settings", settings)
+
+
+@pytest.mark.parametrize("outcome", NOTICES, ids=lambda outcome: outcome.value)
+def test_cada_falla_de_la_ia_lleva_al_borrador_con_su_aviso(
+    client: TestClient,
+    auth_app: FastAPI,
+    ref: ReferenceCatalog,
+    short_timeout: None,
+    outcome: AiOutcome,
+) -> None:
+    if outcome is not AiOutcome.DISABLED:  # sin sustituir nada, la app de pruebas no tiene IA
+        models = {
+            AiOutcome.TIMEOUT: slow_model(1),
+            AiOutcome.PROVIDER_ERROR: failing_model(503),
+            AiOutcome.INVALID_OUTPUT: extraction_model({"lines": "no es una lista"}),
+        }
+        _install(auth_app, models[outcome])
+
+    quote_id = _post_quote(client, "dos tortas medianas")  # 303
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    assert NOTICES[outcome] in html
+    assert "dos tortas medianas" in html
+
+
+@pytest.mark.parametrize("outcome", NOTICES, ids=lambda outcome: outcome.value)
+def test_el_detalle_muestra_solo_el_aviso_de_su_resultado_sin_detalles_tecnicos(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, outcome: AiOutcome
+) -> None:
+    quote_id = _failed_quote(auth_app, outcome)
+
+    main = client.get(f"/cotizaciones/{quote_id}").text.partition("<main")[2]
+
+    assert [notice for notice in NOTICES.values() if notice in main] == [NOTICES[outcome]]
+    for detail in ("503", "Timeout", "timeout", "provider_error", "invalid_output", "Error"):
+        assert detail not in main
+
+
+def test_con_la_ia_bien_no_hay_aviso(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _save_quote(auth_app, _ready_line(ref))
+
+    assert "agrega los productos a mano" not in client.get(f"/cotizaciones/{quote_id}").text
+
+
+def _manual_draft(app: FastAPI) -> int:
+    return _failed_quote(app, AiOutcome.TIMEOUT)
+
+
+def _failed_quote(app: FastAPI, outcome: AiOutcome) -> int:
+    quote_id = _save_quote(app)
+    with Session(app.state.engine) as session:
+        quote = session.get(Quote, quote_id)
+        assert quote is not None
+        quote.ai_outcome = outcome
+        session.add(quote)
+        session.commit()
+    return quote_id
+
+
+def test_el_formulario_de_agregar_ofrece_solo_lo_cotizable(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _manual_draft(auth_app)
+
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    action = f'action="/cotizaciones/{quote_id}/lineas"'
+    assert action in html
+    form = html.partition(action)[2].partition("</form>")[0]
+    assert "Agregar producto" in html
+    assert re.search(r'<select[^>]*name="item"', form)
+    assert re.search(r'<input[^>]*name="quantity"', form)
+    values = set(re.findall(r'<option[^>]*value="([^"]+)"', form))
+    assert values == {
+        f"{ref.torta_id}:{ref.mediana_id}",
+        f"{ref.torta_id}:{ref.grande_id}",
+        str(ref.cafe_id),
+    }
+    assert "Torta de chocolate — Tamaño: Mediana" in form
+    assert not re.search(r'name="(unit_)?price"', form)
+
+
+def test_agregar_una_linea_redirige_y_muestra_su_precio_y_el_total(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _manual_draft(auth_app)
+    data = {"item": f"{ref.torta_id}:{ref.mediana_id}", "quantity": "2"}
+
+    response = client.post(f"/cotizaciones/{quote_id}/lineas", data=data, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith(f"/cotizaciones/{quote_id}")
+    html = client.get(f"/cotizaciones/{quote_id}").text
+    assert "$ 45.000" in html
+    assert "$ 90.000" in html.partition("<tfoot>")[2].partition("</tfoot>")[0]
+
+
+def test_un_precio_enviado_a_mano_se_ignora(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _manual_draft(auth_app)
+    data = {"item": str(ref.cafe_id), "quantity": "1", "price": "1", "unit_price": "1"}
+
+    response = client.post(f"/cotizaciones/{quote_id}/lineas", data=data, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert [line.unit_price for line in _stored_lines(auth_app, quote_id)] == [3500]
+
+
+def _stored_lines(app: FastAPI, quote_id: int) -> list[QuoteLine]:
+    with Session(app.state.engine) as session:
+        quote = session.get(Quote, quote_id)
+        assert quote is not None
+        return list(quote.lines)
+
+
+@pytest.mark.parametrize("quantity", ["0", "-1", "1000", "2.5", "abc", ""])
+def test_una_cantidad_no_valida_vuelve_al_detalle_con_422_y_lo_escrito(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, quantity: str
+) -> None:
+    quote_id = _manual_draft(auth_app)
+    item = f"{ref.torta_id}:{ref.grande_id}"
+
+    response = client.post(
+        f"/cotizaciones/{quote_id}/lineas", data={"item": item, "quantity": quantity}
+    )
+
+    assert response.status_code == 422
+    assert "La cantidad debe ser un número entero entre 1 y 999" in response.text
+    assert re.search(rf'<option[^>]*value="{item}"[^>]*\bselected\b', response.text)
+    if quantity:
+        assert f'value="{quantity}"' in response.text
+    assert _stored_lines(auth_app, quote_id) == []
+
+
+@pytest.mark.parametrize("choice", ["inactivo", "inexistente", "mal_formado", "vacio"])
+def test_un_item_que_no_es_cotizable_vuelve_al_detalle_con_422(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, choice: str
+) -> None:
+    with Session(auth_app.state.engine) as session:
+        cafe = session.get(Product, ref.cafe_id)
+        assert cafe is not None
+        cafe.is_active = False
+        session.add(cafe)
+        session.commit()
+    quote_id = _manual_draft(auth_app)
+    item = {
+        "inactivo": str(ref.cafe_id),
+        "inexistente": "9999",
+        "mal_formado": "cafe",
+        "vacio": "",
+    }[choice]
+
+    response = client.post(f"/cotizaciones/{quote_id}/lineas", data={"item": item, "quantity": "1"})
+
+    assert response.status_code == 422
+    assert "Ese producto ya no está disponible en el catálogo" in response.text
+    assert _stored_lines(auth_app, quote_id) == []
+
+
+def test_agregar_a_una_cotizacion_inexistente_responde_404(
+    client: TestClient, ref: ReferenceCatalog
+) -> None:
+    response = client.post(
+        "/cotizaciones/999/lineas", data={"item": str(ref.cafe_id), "quantity": "1"}
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "La cotización no existe"}

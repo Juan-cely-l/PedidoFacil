@@ -172,6 +172,15 @@ def slow_model(seconds: float) -> ScriptedModel:
     return ScriptedModel(respond)
 
 
+def raising_model(error: BaseException) -> ScriptedModel:
+    """Modelo que lanza `error` al consultarlo."""
+
+    async def respond(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise error
+
+    return ScriptedModel(respond)
+
+
 def failing_model(status_code: int = 503) -> ScriptedModel:
     """Modelo que responde con un error HTTP del proveedor (saturación, cuota…)."""
 

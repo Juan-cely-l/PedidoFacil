@@ -162,3 +162,17 @@ def quote_detail(request: Request, session: SessionDep, quote_id: int) -> HTMLRe
             "pending": quotes.pending_count(quote),
         },
     )
+
+
+@router.post(
+    "/{quote_id}/lineas",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": QUOTE_NOT_FOUND_MESSAGE},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Línea inválida"},
+    },
+)
+def add_line(quote_id: int) -> Response:
+    """Agrega una línea a mano y redirige al detalle."""
+    raise NotImplementedError
