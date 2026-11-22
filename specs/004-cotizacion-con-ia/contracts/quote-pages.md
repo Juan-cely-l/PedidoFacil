@@ -14,7 +14,7 @@ hay errores, se vuelve a mostrar la página con lo escrito y un mensaje en espa�
 | `POST /cotizaciones/{id}/lineas` | Agrega una línea: `item` y `quantity`. | 303 → detalle; 422 si hay errores; 404 |
 | `POST /cotizaciones/{id}/lineas/{line_id}` | Cambia `item` y/o `quantity` de una línea; con `item` válido, resuelve una línea «Por revisar». | 303; 422; 404 si la línea no es de esa cotización |
 | `POST /cotizaciones/{id}/lineas/{line_id}/eliminar` | Elimina la línea. | 303; 404 |
-| `POST /cotizaciones/{id}/entrega` | Guarda `date`, `time`, `mode` y `address`; al guardar se quitan las marcas «por confirmar» de la fecha y de la modalidad. | 303; 422; 404 |
+| `POST /cotizaciones/{id}/entrega` | Guarda `date`, `time`, `mode` y `address`; al guardar se quitan las marcas «por confirmar» de la fecha, la hora y la modalidad. | 303; 422; 404 |
 
 No existe ninguna ruta ni ningún campo de formulario para escribir un precio (FR-014). Un campo
 `price` o `unit_price` enviado a mano se ignora, porque los modelos de entrada no lo tienen; una
