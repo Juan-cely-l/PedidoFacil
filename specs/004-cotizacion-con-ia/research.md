@@ -74,6 +74,18 @@ que admite cada modelo. Envía `MINIMAL` a `gemini-3.5-flash-lite` y `gemini-3.5
 - **Corrige una lectura anterior de este plan**: donde R2 dice «apagar el razonamiento», debe
   entenderse «reducirlo al mínimo que admite el modelo».
 
+### Incidencia de la franja de la mañana del 2026-11-22
+
+- La corrida empezó hacia las 09:45 (hora de Colombia) y el autor la interrumpió con Ctrl+C tras 3
+  de 51 peticiones (última fila, 09:46:34). Se reanuda después de las 09:51, así que **la ventana
+  real de la franja fue más amplia de lo previsto**: incluye esa pausa. La hora de cierre se anota
+  con el resultado.
+- Las 3 filas se conservan y no se repiten, aunque una sea un 503 y otra tardara 28,8 s. De esas 3
+  no hay detalle de líneas, porque el archivo de líneas se agregó después.
+- **Lo que no se ajusta tras ver datos es la regla de decisión; la logística sí, y queda
+  registrado aquí.** El arreglo solo cambia el script: no las instrucciones, el banco,
+  `build_lines`, la regla de R14 ni lo que se envía a Gemini.
+
 ### Cómo se vuelve a medir (antes del merge y cada vez que se dude)
 
 Se usa `scripts/medir_gemini.py`, un script manual. Llama a la API real con `GEMINI_API_KEY`; no
@@ -105,6 +117,8 @@ variantes y cantidades correctos).
    (sobre todas sus peticiones), p50, p95 y porcentaje de acierto. Los percentiles son por rango
    más cercano y sobre las respuestas válidas (precisado el 2026-11-22, antes de medir): los
    fallos ya cuentan en contra en el primer porcentaje, y un error rápido no debe bajar el p95.
+   Las líneas de cada respuesta válida van a `mediciones_lineas.csv` (ids, cantidad, estado y
+   motivo, sin texto del cliente), para poder decir en qué falló el acierto.
 6. **Regla de elección**, fijada el 2026-11-21, antes de ver los datos:
    - gana el modelo con **mayor porcentaje de respuestas válidas en 10 s o menos**, contando las
      dos franjas;

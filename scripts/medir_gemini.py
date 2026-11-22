@@ -1,8 +1,16 @@
 """Medición manual de modelos de Gemini sobre el banco de mensajes (PED-16, research R2 y R14).
 
 Llama a la API real con la clave de quien lo ejecuta: no es una prueba y la CI no lo corre. Mide
-la cadena de la app (agente, instrucciones, `build_lines`) y guarda una fila por petición, sin el
-texto de los mensajes ni la clave.
+la cadena de la app (agente, instrucciones, `build_lines`) y guarda, sin el texto de los mensajes
+ni la clave:
+
+- `mediciones.csv`: una fila por petición;
+- `mediciones_lineas.csv`: una fila por línea devuelta, con los ids y la cantidad tal como los dio
+  el modelo (un id inventado se ve como inventado) y el estado y el motivo que les puso el código.
+  Una respuesta válida sin líneas no deja filas ahí.
+
+Una franja interrumpida se reanuda con el mismo comando: solo se piden los pares mensaje-modelo
+que faltan. Lo ya medido no se repite, haya salido bien o mal.
 
     uv run --no-sync python -m scripts.medir_gemini --franja manana
     uv run --no-sync python -m scripts.medir_gemini --franja tarde
@@ -41,6 +49,7 @@ CUOTA_AGOTADA = "429"
 ERRORES_DE_ARRANQUE = frozenset({"400", "401", "403"})
 COLOMBIA = ZoneInfo("America/Bogota")
 DESTINO = Path(__file__).parents[1] / "specs" / "004-cotizacion-con-ia" / "mediciones.csv"
+DESTINO_LINEAS = DESTINO.with_name("mediciones_lineas.csv")
 COLUMNAS = (
     "fecha",
     "franja",
@@ -54,6 +63,19 @@ COLUMNAS = (
     "sobrantes",
 )
 
+COLUMNAS_LINEAS = (
+    "fecha",
+    "franja",
+    "modelo",
+    "mensaje",
+    "linea",
+    "product_id",
+    "variant_id",
+    "cantidad",
+    "estado",
+    "motivo",
+)
+
 Fila = dict[str, str]
 
 
@@ -62,11 +84,14 @@ def decir(texto: str = "") -> None:
     print(texto, flush=True)  # noqa: T201  (script manual de consola)
 
 
-async def medir(agente: Agent[None, QuoteExtraction], caso: CasoBanco) -> tuple[Fila, str]:
-    """Hace una petición y devuelve su fila y, si falló, el detalle para la consola."""
+async def medir(
+    agente: Agent[None, QuoteExtraction], caso: CasoBanco
+) -> tuple[Fila, list[Fila], str]:
+    """Hace una petición y devuelve su fila, sus líneas y, si falló, el detalle para la consola."""
     catalogo = CATALOGOS[caso.negocio]
     codigo = detalle = ""
     acierto: Acierto | None = None
+    lineas: list[Fila] = []
     inicio = time.monotonic()
     try:
         async with asyncio.timeout(ESPERA_MAXIMA_S):
@@ -82,7 +107,23 @@ async def medir(agente: Agent[None, QuoteExtraction], caso: CasoBanco) -> tuple[
         resultado, detalle = AiOutcome.PROVIDER_ERROR, type(error).__name__
     else:
         resultado = AiOutcome.OK
-        acierto = puntuar(caso.esperado, build_lines(respuesta.output, catalogo))
+        borradores = build_lines(respuesta.output, catalogo)
+        acierto = puntuar(caso.esperado, borradores)
+        # Ids y cantidad del modelo, sin `customer_text`; estado y motivo del código.
+        lineas = [
+            {
+                "mensaje": caso.id,
+                "linea": str(posicion),
+                "product_id": texto_o_vacio(devuelta.product_id),
+                "variant_id": texto_o_vacio(devuelta.variant_id),
+                "cantidad": texto_o_vacio(devuelta.quantity),
+                "estado": borrador.status.value,
+                "motivo": texto_o_vacio(borrador.review_reason),
+            }
+            for posicion, (devuelta, borrador) in enumerate(
+                zip(respuesta.output.lines, borradores, strict=True), start=1
+            )
+        ]
     fila = {
         "mensaje": caso.id,
         "duracion_ms": str(round((time.monotonic() - inicio) * 1000)),
@@ -92,7 +133,12 @@ async def medir(agente: Agent[None, QuoteExtraction], caso: CasoBanco) -> tuple[
         "correctos": str(acierto.correctos) if acierto else "",
         "sobrantes": str(acierto.sobrantes) if acierto else "",
     }
-    return fila, detalle
+    return fila, lineas, detalle
+
+
+def texto_o_vacio(valor: object) -> str:
+    """El valor como texto, o vacío si no hay."""
+    return "" if valor is None else str(valor)
 
 
 def leer_filas(fecha: str) -> list[Fila]:
@@ -103,14 +149,14 @@ def leer_filas(fecha: str) -> list[Fila]:
         return [fila for fila in csv.DictReader(archivo) if fila["fecha"] == fecha]
 
 
-def guardar(fila: Fila) -> None:
-    """Agrega una fila al momento, para no perder lo medido si la corrida se interrumpe."""
-    es_nuevo = not DESTINO.exists()
-    with DESTINO.open("a", newline="", encoding="utf-8") as archivo:
-        salida = csv.DictWriter(archivo, COLUMNAS, lineterminator="\n")
+def guardar(destino: Path, columnas: tuple[str, ...], filas: list[Fila]) -> None:
+    """Agrega filas al momento, para no perder lo medido si la corrida se interrumpe."""
+    es_nuevo = not destino.exists()
+    with destino.open("a", newline="", encoding="utf-8") as archivo:
+        salida = csv.DictWriter(archivo, columnas, lineterminator="\n")
         if es_nuevo:
             salida.writeheader()
-        salida.writerow(fila)
+        salida.writerows(filas)
 
 
 def percentil(valores: list[int], porcentaje: int) -> str:
@@ -148,10 +194,21 @@ def resumir(filas: list[Fila]) -> None:
 
 
 async def correr(franja: str, clave: str) -> None:
-    """Mide una franja: cada mensaje una vez por modelo, intercalando los modelos."""
+    """Mide o reanuda una franja: cada mensaje una vez por modelo, intercalando los modelos."""
     fecha = datetime.datetime.now(COLOMBIA).date().isoformat()
-    if any(fila["franja"] == franja for fila in leer_filas(fecha)):
-        raise SystemExit(f"La franja {franja} de {fecha} ya tiene filas en {DESTINO}")
+    hechas = {
+        (fila["mensaje"], fila["modelo"]) for fila in leer_filas(fecha) if fila["franja"] == franja
+    }
+    peticiones = [(caso, modelo) for caso in MENSAJES for modelo in MODELOS]
+    pendientes = [
+        (numero, caso, modelo)
+        for numero, (caso, modelo) in enumerate(peticiones, start=1)
+        if (caso.id, modelo) not in hechas
+    ]
+    if not pendientes:
+        raise SystemExit(f"La franja {franja} de {fecha} ya está completa en {DESTINO}")
+    if hechas:
+        decir(f"Se reanuda la franja {franja}: {len(hechas)} hechas, {len(pendientes)} pendientes")
     agentes: dict[str, Agent[None, QuoteExtraction]] = {}
     for modelo in MODELOS:
         agente = build_quote_agent(
@@ -165,14 +222,15 @@ async def correr(franja: str, clave: str) -> None:
             raise SystemExit(f"No se pudo construir el agente de {modelo}")
         agentes[modelo] = agente
     # Intercalados, cada modelo recibe como mucho una petición cada 15 s (4 por minuto).
-    peticiones = [(caso, modelo) for caso in MENSAJES for modelo in MODELOS]
-    for numero, (caso, modelo) in enumerate(peticiones, start=1):
-        if numero > 1:
+    for orden, (numero, caso, modelo) in enumerate(pendientes):
+        if orden > 0:
             await asyncio.sleep(PAUSA_S)
-        fila, detalle = await medir(agentes[modelo], caso)
-        if numero == 1 and fila["codigo_http"] in ERRORES_DE_ARRANQUE:
+        fila, lineas, detalle = await medir(agentes[modelo], caso)
+        if orden == 0 and fila["codigo_http"] in ERRORES_DE_ARRANQUE:
             raise SystemExit(f"Error de clave o configuración, no se guardó nada: {detalle}")
-        guardar({"fecha": fecha, "franja": franja, "modelo": modelo, **fila})
+        contexto = {"fecha": fecha, "franja": franja, "modelo": modelo}
+        guardar(DESTINO_LINEAS, COLUMNAS_LINEAS, [{**contexto, **linea} for linea in lineas])
+        guardar(DESTINO, COLUMNAS, [{**contexto, **fila}])
         decir(
             f"{numero}/{len(peticiones)} {modelo} {caso.id}: {fila['resultado']} "
             f"{fila['duracion_ms']} ms {detalle[:200]}".rstrip()
