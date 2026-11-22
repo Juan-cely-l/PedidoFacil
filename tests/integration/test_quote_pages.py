@@ -7,6 +7,7 @@ hora de Colombia se prueban congelando el reloj con time-machine (FR-021).
 import datetime
 import re
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
 import time_machine
@@ -14,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.models.quote import Quote
+from app.models.quote import AiOutcome, LineStatus, Quote, QuoteLine, ReviewReason
 from app.routers.quotes import get_quote_extractor
 from tests.doubles import (
     EMPTY_EXTRACTION,
@@ -243,3 +244,197 @@ def test_la_navegacion_tiene_el_enlace_a_cotizaciones(client: TestClient) -> Non
 
     assert 'href="/cotizaciones"' in html
     assert "Cotizaciones" in html
+
+
+# Historia 2: «Por revisar». Casi todas guardan la cotización directamente, para que fallen por
+# la plantilla y no por `build_lines`; la primera recorre el camino completo.
+
+REASONS = {
+    "una docena de empanadas": "No está en el catálogo",
+    "una torta de chocolate": "Falta la presentación",
+    "cero cafes": "Cantidad no válida",
+}
+
+
+def _line(**fields: Any) -> QuoteLine:
+    # `quote_id` lo pone la relación al guardar, como en el servicio.
+    return QuoteLine(**fields)
+
+
+def _ready_line(ref: ReferenceCatalog) -> QuoteLine:
+    return _line(
+        position=1,
+        customer_text="dos tortas medianas",
+        status=LineStatus.LISTA,
+        product_id=ref.torta_id,
+        variant_id=ref.mediana_id,
+        label="Torta de chocolate — Tamaño: Mediana",
+        unit_price=45000,
+        quantity=2,
+    )
+
+
+def _pending_lines(ref: ReferenceCatalog) -> list[QuoteLine]:
+    cases = [
+        ("una docena de empanadas", ReviewReason.NO_RECONOCIDO, None, 12),
+        ("una torta de chocolate", ReviewReason.FALTA_VARIANTE, ref.torta_id, 1),
+        ("cero cafes", ReviewReason.CANTIDAD_INVALIDA, ref.cafe_id, None),
+    ]
+    return [
+        _line(
+            position=position,
+            customer_text=text,
+            status=LineStatus.POR_REVISAR,
+            review_reason=reason,
+            product_id=product_id,
+            quantity=quantity,
+        )
+        for position, (text, reason, product_id, quantity) in enumerate(cases, start=2)
+    ]
+
+
+def _save_quote(app: FastAPI, *lines: QuoteLine, **fields: Any) -> int:
+    with Session(app.state.engine) as session:
+        quote = Quote(
+            customer_message="mensaje del cliente",
+            created_at=datetime.datetime.now(datetime.UTC),
+            ai_outcome=AiOutcome.OK,
+            lines=list(lines),
+            **fields,
+        )
+        session.add(quote)
+        session.commit()
+        assert quote.id is not None
+        return quote.id
+
+
+def _row_with(html: str, text: str) -> str:
+    row: str
+    (row,) = [row for row in re.findall(r"<tr\b.*?</tr>", html, re.DOTALL) if text in row]
+    return row
+
+
+def test_cotizar_algo_fuera_del_catalogo_muestra_la_linea_por_revisar(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, use_model: None
+) -> None:
+    lines = [
+        line_payload(ref.cafe_id, None, 2, "dos cafes"),
+        line_payload(None, None, 12, "una docena de empanadas"),
+        line_payload(ref.torta_id, None, 1, "una torta de chocolate"),
+    ]
+    _install(auth_app, extraction_model({**EMPTY_EXTRACTION, "lines": lines}))
+
+    quote_id = _post_quote(client, "dos cafes, empanadas y una torta")
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    assert "No está en el catálogo" in _row_with(html, "una docena de empanadas")
+    assert "Falta la presentación" in _row_with(html, "una torta de chocolate")
+    assert "Incompleta: 2 línea(s) por revisar" in html
+
+
+@pytest.mark.parametrize(
+    ("text", "reason"),
+    REASONS.items(),
+    ids=["no_reconocido", "falta_variante", "cantidad_invalida"],
+)
+def test_una_linea_por_revisar_muestra_su_motivo_y_el_texto_sin_precio(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, text: str, reason: str
+) -> None:
+    quote_id = _save_quote(auth_app, _ready_line(ref), *_pending_lines(ref))
+
+    row = _row_with(client.get(f"/cotizaciones/{quote_id}").text, text)
+
+    assert "Por revisar" in row
+    assert reason in row
+    assert all(other not in row for other in REASONS.values() if other != reason)
+    assert "$" not in row  # ni precio unitario ni subtotal
+    assert "None" not in row
+
+
+@pytest.mark.parametrize("pending", [1, 2, 3])
+def test_con_pendientes_el_encabezado_dice_cuantas_lineas_faltan(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, pending: int
+) -> None:
+    quote_id = _save_quote(auth_app, _ready_line(ref), *_pending_lines(ref)[:pending])
+
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    header = html.partition("Mensaje del cliente")[0]
+    assert f"Incompleta: {pending} línea(s) por revisar" in header
+
+
+@pytest.mark.parametrize(
+    ("with_ready", "total"),
+    [pytest.param(True, "$ 90.000", id="mezcla"), pytest.param(False, "$ 0", id="solo_pendientes")],
+)
+def test_con_pendientes_el_total_avisa_que_no_las_incluye(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, with_ready: bool, total: str
+) -> None:
+    ready = [_ready_line(ref)] if with_ready else []
+    quote_id = _save_quote(auth_app, *ready, *_pending_lines(ref))
+
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    footer = html.partition("<tfoot>")[2].partition("</tfoot>")[0]
+    assert total in footer
+    assert "No incluye las líneas por revisar" in footer
+
+
+def test_una_cotizacion_completa_no_muestra_avisos_de_revision(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _save_quote(auth_app, _ready_line(ref))
+
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    for notice in ("Incompleta", "Por revisar", "por revisar", "Por confirmar"):
+        assert notice not in html
+
+
+def test_r09_un_mensaje_que_no_es_un_pedido_no_muestra_nada_por_revisar(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, use_model: None
+) -> None:
+    _install(auth_app, extraction_model(EMPTY_EXTRACTION))
+
+    quote_id = _post_quote(client, "buenas tardes, estan abiertos hoy?")
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    assert "Esta cotización aún no tiene productos" in html
+    for notice in ("Incompleta", "Por revisar", "por revisar"):
+        assert notice not in html
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        ("delivery_date_needs_review", "Fecha", "Hora"),
+        ("delivery_time_needs_review", "Hora", "Modalidad"),
+        ("delivery_mode_needs_review", "Modalidad", "Dirección"),
+    ],
+    ids=["fecha", "hora", "modalidad"],
+)
+def test_por_confirmar_aparece_solo_junto_al_dato_marcado(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, field: tuple[str, str, str]
+) -> None:
+    flag, label, next_label = field
+    quote_id = _save_quote(auth_app, _ready_line(ref), **{flag: True})
+
+    delivery = client.get(f"/cotizaciones/{quote_id}").text.partition("<h2>Entrega</h2>")[2]
+
+    assert delivery.count("Por confirmar") == 1
+    assert "Por confirmar" in delivery.partition(label)[2].partition(next_label)[0]
+
+
+def test_la_lista_dice_cuantas_lineas_faltan_por_revisar(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    complete = _save_quote(auth_app, _ready_line(ref))
+    incomplete = _save_quote(auth_app, _ready_line(ref), *_pending_lines(ref)[:2])
+
+    html = client.get("/cotizaciones").text
+
+    items = re.findall(r"<li>.*?</li>", html, re.DOTALL)
+    (complete_item,) = [item for item in items if f'/cotizaciones/{complete}"' in item]
+    (incomplete_item,) = [item for item in items if f'/cotizaciones/{incomplete}"' in item]
+    assert "2 por revisar" in incomplete_item
+    assert "por revisar" not in complete_item

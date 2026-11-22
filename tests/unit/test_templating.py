@@ -1,8 +1,10 @@
 """Plantillas: formato de pesos y plantilla base."""
 
+import datetime
+
 import pytest
 
-from app.templating import cop, templates
+from app.templating import colombia, cop, templates
 
 
 @pytest.mark.parametrize(
@@ -31,3 +33,26 @@ def test_plantilla_base_es_movil_en_espanol_y_carga_pico_con_version_fija() -> N
     assert "@picocss/pico@2." in html
     assert 'integrity="sha384-' in html
     assert 'href="/productos"' in html
+
+
+# Cobertura de una rama existente de `colombia`, no comportamiento nuevo: es la que corre en
+# producción. PostgreSQL devuelve fechas con zona; SQLite, la base de las pruebas, sin ella.
+
+
+@pytest.mark.parametrize(
+    "moment",
+    [
+        datetime.datetime(2026, 11, 21, 3, 30, tzinfo=datetime.UTC),
+        # PostgreSQL entrega el instante en la zona de la conexión, que no tiene que ser UTC. Con
+        # solo el caso UTC, un filtro que pisara la zona con `replace(tzinfo=UTC)` pasaría.
+        datetime.datetime(
+            2026, 11, 20, 22, 30, tzinfo=datetime.timezone(datetime.timedelta(hours=-5))
+        ),
+        datetime.datetime(
+            2026, 11, 21, 5, 30, tzinfo=datetime.timezone(datetime.timedelta(hours=2))
+        ),
+    ],
+    ids=["utc", "bogota", "utc+2"],
+)
+def test_colombia_convierte_una_fecha_que_ya_trae_zona_horaria(moment: datetime.datetime) -> None:
+    assert colombia(moment) == "20/11/2026 22:30"

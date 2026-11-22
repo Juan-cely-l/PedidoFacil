@@ -10,7 +10,8 @@ import datetime
 import pytest
 from sqlmodel import Session
 
-from app.models.quote import AiOutcome, LineStatus, Quote, QuoteStatus
+from app.models.catalog import Product, ProductVariant
+from app.models.quote import AiOutcome, LineStatus, Quote, QuoteStatus, ReviewReason
 from app.services import quotes
 from tests.banco_mensajes import MENSAJES
 from tests.doubles import (
@@ -284,3 +285,157 @@ def test_la_lista_va_de_la_cotizacion_mas_reciente_a_la_mas_antigua(
     )
 
     assert [quote.id for quote in quotes.list_quotes(session)] == [second.id, first.id]
+
+
+# Historia 2: lo que queda por revisar
+
+
+def test_un_valido_un_inexistente_y_uno_sin_variante_solo_suma_el_valido(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    model = _model(
+        line_payload(ref.cafe_id, None, 2, "dos cafes"),
+        line_payload(9999, None, 12, "una docena de empanadas"),
+        line_payload(ref.torta_id, None, 1, "una torta de chocolate"),
+    )
+
+    quote = _quote(session, "dos cafes, una docena de empanadas y una torta de chocolate", model)
+
+    assert [
+        (line.customer_text, line.status, line.review_reason, line.product_id, line.unit_price)
+        for line in quote.lines
+    ] == [
+        ("dos cafes", LineStatus.LISTA, None, ref.cafe_id, 3500),
+        ("una docena de empanadas", "por_revisar", ReviewReason.NO_RECONOCIDO, None, None),
+        ("una torta de chocolate", "por_revisar", ReviewReason.FALTA_VARIANTE, ref.torta_id, None),
+    ]
+    assert quote.ai_outcome == AiOutcome.OK
+    assert quotes.pending_count(quote) == 2
+    assert quotes.quote_total(quote) == 7000
+
+
+def test_lo_guardado_por_revisar_no_viola_llaves_foraneas(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    model = _model(
+        line_payload(9999, None, 1, "algo inventado"),
+        line_payload(ref.torta_id, 9999, 1, "una variante inventada"),
+    )
+
+    quote = _quote(session, "algo inventado", model)
+
+    assert quotes.pending_count(quote) == 2
+    # SQLite no aplica las FK al guardar y PostgreSQL sí: se le pide a SQLite que las revise.
+    assert session.connection().exec_driver_sql("PRAGMA foreign_key_check").all() == []
+
+
+def test_si_no_se_reconoce_nada_se_guarda_el_borrador_con_total_0(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    model = _model(
+        line_payload(None, None, 15, "gorras bordadas"),
+        line_payload(None, None, None, "una empanada"),
+    )
+
+    quote = _quote(session, "gorras bordadas y una empanada", model)
+
+    assert quote.id is not None
+    assert quote.status == QuoteStatus.BORRADOR
+    assert all(line.status == LineStatus.POR_REVISAR for line in quote.lines)
+    assert quotes.pending_count(quote) == 2
+    assert quotes.quote_total(quote) == 0
+
+
+def test_un_producto_y_una_variante_desactivados_no_reciben_precio(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    cafe = session.get(Product, ref.cafe_id)
+    grande = session.get(ProductVariant, ref.grande_id)
+    assert cafe is not None
+    assert grande is not None
+    cafe.is_active = grande.is_active = False
+    session.add_all([cafe, grande])
+    session.commit()
+    model = _model(
+        line_payload(ref.cafe_id, None, 1, "un cafe"),
+        line_payload(ref.torta_id, ref.grande_id, 1, "una torta grande"),
+    )
+
+    quote = _quote(session, "un cafe y una torta grande", model)
+
+    assert [(line.review_reason, line.product_id, line.unit_price) for line in quote.lines] == [
+        (ReviewReason.NO_RECONOCIDO, None, None),
+        (ReviewReason.NO_RECONOCIDO, None, None),
+    ]
+
+
+@pytest.mark.parametrize("quantity", [0, 1000])
+def test_una_cantidad_fuera_de_rango_se_guarda_por_revisar_sin_fallar(
+    session: Session, ref: ReferenceCatalog, quantity: int
+) -> None:
+    quote = _quote(session, "muchos cafes", _model(line_payload(ref.cafe_id, None, quantity)))
+
+    (line,) = quote.lines
+    assert (line.review_reason, line.quantity) == (ReviewReason.CANTIDAD_INVALIDA, None)
+    assert quotes.quote_total(quote) == 0
+
+
+def test_r09_un_mensaje_que_no_es_un_pedido_se_guarda_sin_lineas_ni_pendientes(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    caso = next(caso for caso in MENSAJES if caso.id == "R09")
+
+    quote = _quote(session, caso.texto, _model())
+
+    assert quote.ai_outcome == AiOutcome.OK
+    assert quote.lines == []
+    assert quotes.pending_count(quote) == 0
+    assert quotes.quote_total(quote) == 0
+
+
+def test_una_fecha_que_no_se_puede_resolver_queda_vacia_y_marcada(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    message = "un cafe a fin de mes, si se puede"
+    model = _model(line_payload(ref.cafe_id, None, 1), delivery_date={"kind": "unknown"})
+
+    quote = _quote(session, message, model)
+
+    assert quote.delivery_date is None
+    assert quote.delivery_date_needs_review is True
+    assert quote.customer_message == message
+
+
+def test_una_direccion_sin_modalidad_asume_domicilio_y_lo_marca(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    model = _model(line_payload(ref.cafe_id, None, 1), delivery_address="Calle 10 # 5-20")
+
+    quote = _quote(session, "un cafe para la calle 10 # 5-20", model)
+
+    assert quote.delivery_mode == "domicilio"
+    assert quote.delivery_mode_needs_review is True
+
+
+def test_una_direccion_vacia_no_asume_domicilio(session: Session, ref: ReferenceCatalog) -> None:
+    model = _model(line_payload(ref.cafe_id, None, 1), delivery_address="")
+
+    quote = _quote(session, "un cafe", model)
+
+    assert quote.delivery_mode is None
+    assert quote.delivery_mode_needs_review is False
+
+
+def test_una_direccion_con_recoger_respeta_lo_que_dijo_el_cliente(
+    session: Session, ref: ReferenceCatalog
+) -> None:
+    model = _model(
+        line_payload(ref.cafe_id, None, 1),
+        delivery_mode="recoger",
+        delivery_address="Calle 10 # 5-20",
+    )
+
+    quote = _quote(session, "un cafe, lo recojo", model)
+
+    assert quote.delivery_mode == "recoger"
+    assert quote.delivery_mode_needs_review is False
