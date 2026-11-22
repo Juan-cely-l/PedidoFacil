@@ -80,6 +80,9 @@ Reglas:
 - Solo puedes elegir productos y variantes de la lista <catalogo> que se te da, por su id.
 - Si no estás seguro de qué producto o variante es, deja product_id o variant_id en null y copia \
 en customer_text lo que escribió el cliente.
+- Si el mensaje no contiene ningún pedido (solo un saludo o una pregunta general), deja lines \
+vacía: no crees líneas, ni siquiera con product_id en null. Preguntar por un producto o por su \
+precio sí es un pedido, aunque no esté en el catálogo.
 - No inventes productos, variantes ni cantidades.
 - No hay campos de precio: no calcules ni menciones ningún precio, subtotal o total.
 

@@ -202,6 +202,10 @@ variantes y cantidades correctos).
     2. **Reglas**:
        - solo puedes elegir productos y variantes de la lista que se te da, por su id;
        - si no estás seguro, deja `product_id` en `null` y copia el texto del cliente;
+       - si el mensaje no contiene ningún pedido (solo un saludo o una pregunta general), deja
+         `lines` vacía, sin líneas con `product_id` en `null`. Preguntar por un producto o por su
+         precio **sí es un pedido**, aunque no esté en el catálogo (fijada el 2026-11-22, antes de
+         medir);
        - nunca inventes productos;
        - no hay campos de precio: no calcules ni menciones precios.
     3. **Cantidades**: «una docena» es 12, «media docena» 6 y «un par» 2; si el cliente no dice
