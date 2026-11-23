@@ -24,7 +24,15 @@ from pydantic_ai.models.fallback import FallbackModel
 from sqlmodel import Session
 
 from app.models.catalog import Product, ProductVariant
-from app.models.quote import AiOutcome, LineInput, LineStatus, Quote, QuoteStatus, ReviewReason
+from app.models.quote import (
+    AiOutcome,
+    DeliveryInput,
+    LineInput,
+    LineStatus,
+    Quote,
+    QuoteStatus,
+    ReviewReason,
+)
 from app.services import quotes
 from app.services.quote_ai import QuoteExtraction
 from tests.banco_mensajes import MENSAJES
@@ -751,3 +759,251 @@ def test_la_linea_manual_acepta_los_dos_formatos_de_item(item: str, quantity: st
     data = LineInput.model_validate({"item": item, "quantity": quantity})
 
     assert (data.item, data.quantity) == (item, int(quantity))
+
+
+# Historia 4: corregir el borrador (data-model.md, «Transiciones de una línea»)
+
+
+@pytest.fixture
+def draft(session: Session, ref: ReferenceCatalog) -> Quote:
+    """Una lista (2 tortas medianas), dos por revisar y un café con cantidad supuesta."""
+    model = _model(
+        line_payload(ref.torta_id, ref.mediana_id, 2, "dos tortas medianas"),
+        line_payload(None, None, 12, "una docena de empanadas"),
+        line_payload(ref.torta_id, None, 1, "una torta de chocolate"),
+        line_payload(ref.cafe_id, None, None, "un cafe"),
+        delivery_date={"kind": "unknown"},
+        delivery_time="a las 3",
+        delivery_address="Calle 10 # 5-20",
+    )
+    quote = _cotizar(session, quote_agent(model))
+    assert quotes.quote_total(quote) == 93500
+    return quote
+
+
+def _line_id(quote: Quote, position: int) -> int:
+    line_id = quote.lines[position - 1].id
+    assert line_id is not None
+    return line_id
+
+
+def _quote_id(quote: Quote) -> int:
+    assert quote.id is not None
+    return quote.id
+
+
+def _reread(session: Session, quote: Quote) -> Quote:
+    session.expire_all()
+    return quotes.get_quote(session, _quote_id(quote))
+
+
+def test_cambiar_solo_la_cantidad_conserva_el_precio_y_recalcula_el_total(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    data = LineInput(item=f"{ref.torta_id}:{ref.mediana_id}", quantity=3)
+
+    line = quotes.update_line(session, _quote_id(draft), _line_id(draft, 1), data)
+
+    assert (line.quantity, line.unit_price) == (3, 45000)
+    assert quotes.quote_total(_reread(session, draft)) == 45000 * 3 + 3500
+
+
+def test_cambiar_la_cantidad_no_toma_el_precio_nuevo_del_catalogo(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    # FR-015: la línea conserva el precio con que se cotizó.
+    torta = session.get(Product, ref.torta_id)
+    assert torta is not None
+    torta.price = 50000  # la Mediana no tiene precio propio: hereda este
+    session.add(torta)
+    session.commit()
+    data = LineInput(item=f"{ref.torta_id}:{ref.mediana_id}", quantity=3)
+
+    line = quotes.update_line(session, _quote_id(draft), _line_id(draft, 1), data)
+
+    assert line.unit_price == 45000
+
+
+def test_cambiar_la_cantidad_de_algo_ya_desactivado_conserva_la_linea(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    cafe = session.get(Product, ref.cafe_id)
+    assert cafe is not None
+    cafe.is_active = False
+    session.add(cafe)
+    session.commit()
+
+    line = quotes.update_line(
+        session, _quote_id(draft), _line_id(draft, 4), LineInput(item=str(ref.cafe_id), quantity=2)
+    )
+
+    assert (line.status, line.quantity, line.unit_price) == (LineStatus.LISTA, 2, 3500)
+
+
+def test_confirmar_la_cantidad_quita_la_marca_de_cantidad_supuesta(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    assert draft.lines[3].quantity_assumed is True
+
+    line = quotes.update_line(
+        session, _quote_id(draft), _line_id(draft, 4), LineInput(item=str(ref.cafe_id), quantity=1)
+    )
+
+    assert (line.quantity, line.quantity_assumed) == (1, False)
+
+
+def test_cambiar_la_variante_copia_la_etiqueta_y_el_precio_vigentes(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    grande = session.get(ProductVariant, ref.grande_id)
+    assert grande is not None
+    grande.price = 65000  # cambió después de cotizar: al editar el ítem, vale el nuevo
+    session.add(grande)
+    session.commit()
+    data = LineInput(item=f"{ref.torta_id}:{ref.grande_id}", quantity=2)
+
+    line = quotes.update_line(session, _quote_id(draft), _line_id(draft, 1), data)
+
+    assert (line.variant_id, line.unit_price) == (ref.grande_id, 65000)
+    assert line.label == "Torta de chocolate — Tamaño: Grande"
+
+
+@pytest.mark.parametrize("position", [2, 3], ids=["no_reconocido", "falta_variante"])
+def test_elegir_un_item_resuelve_una_linea_por_revisar(
+    session: Session, ref: ReferenceCatalog, draft: Quote, position: int
+) -> None:
+    text = draft.lines[position - 1].customer_text
+    data = LineInput(item=f"{ref.torta_id}:{ref.mediana_id}", quantity=4)
+
+    line = quotes.update_line(session, _quote_id(draft), _line_id(draft, position), data)
+
+    assert (line.status, line.review_reason) == (LineStatus.LISTA, None)
+    assert (line.product_id, line.variant_id) == (ref.torta_id, ref.mediana_id)
+    assert (line.label, line.unit_price, line.quantity) == (
+        "Torta de chocolate — Tamaño: Mediana",
+        45000,
+        4,
+    )
+    assert line.customer_text == text  # lo que pidió el cliente sigue a la vista
+    stored = _reread(session, draft)
+    assert quotes.pending_count(stored) == 1
+    assert quotes.quote_total(stored) == 93500 + 45000 * 4
+
+
+@pytest.mark.parametrize("position", [1, 2], ids=["lista", "por_revisar"])
+def test_un_item_que_no_es_cotizable_no_cambia_la_linea(
+    session: Session, ref: ReferenceCatalog, draft: Quote, position: int
+) -> None:
+    before = draft.lines[position - 1].model_dump()
+
+    with pytest.raises(quotes.ItemNotQuotableError):
+        quotes.update_line(
+            session, _quote_id(draft), _line_id(draft, position), LineInput(item="9999", quantity=1)
+        )
+
+    assert _reread(session, draft).lines[position - 1].model_dump() == before
+
+
+def test_no_se_edita_ni_se_quita_una_linea_de_otra_cotizacion(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    other = _cotizar(session, quote_agent(_model(line_payload(ref.cafe_id, None, 1))))
+    foreign = _line_id(other, 1)
+    data = LineInput(item=str(ref.cafe_id), quantity=5)
+
+    with pytest.raises(quotes.QuoteLineNotFoundError):
+        quotes.update_line(session, _quote_id(draft), foreign, data)
+    with pytest.raises(quotes.QuoteLineNotFoundError):
+        quotes.remove_line(session, _quote_id(draft), foreign)
+
+    assert [line.quantity for line in _reread(session, other).lines] == [1]
+
+
+def test_una_linea_o_una_cotizacion_inexistentes_no_se_encuentran(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    data = LineInput(item=str(ref.cafe_id), quantity=1)
+
+    with pytest.raises(quotes.QuoteLineNotFoundError):
+        quotes.update_line(session, _quote_id(draft), 999, data)
+    with pytest.raises(quotes.QuoteLineNotFoundError):
+        quotes.remove_line(session, _quote_id(draft), 999)
+    with pytest.raises(quotes.QuoteNotFoundError):
+        quotes.update_line(session, 999, _line_id(draft, 1), data)
+    with pytest.raises(quotes.QuoteNotFoundError):
+        quotes.update_delivery(session, 999, DeliveryInput())
+
+
+def test_quitar_una_linea_la_borra_y_baja_el_total(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    quotes.remove_line(session, _quote_id(draft), _line_id(draft, 1))
+
+    stored = _reread(session, draft)
+    assert [line.position for line in stored.lines] == [2, 3, 4]
+    assert quotes.quote_total(stored) == 3500
+
+
+def test_quitar_las_lineas_por_revisar_deja_la_cotizacion_completa(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    for position in (2, 3):
+        quotes.remove_line(session, _quote_id(draft), _line_id(draft, position))
+
+    assert quotes.pending_count(_reread(session, draft)) == 0
+
+
+def test_guardar_la_entrega_la_cambia_y_quita_las_tres_marcas(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    assert (
+        draft.delivery_date_needs_review,
+        draft.delivery_time_needs_review,
+        draft.delivery_mode_needs_review,
+    ) == (True, True, True)
+    data = DeliveryInput(date="2026-11-28", time="15:30", mode="recoger", address=" Calle 1 ")
+
+    quotes.update_delivery(session, _quote_id(draft), data)
+
+    stored = _reread(session, draft)
+    assert stored.delivery_date == datetime.date(2026, 11, 28)
+    assert stored.delivery_time == datetime.time(15, 30)
+    assert (stored.delivery_mode, stored.delivery_address) == ("recoger", "Calle 1")
+    assert (
+        stored.delivery_date_needs_review,
+        stored.delivery_time_needs_review,
+        stored.delivery_mode_needs_review,
+    ) == (False, False, False)
+
+
+def test_guardar_la_entrega_vacia_la_deja_sin_datos(
+    session: Session, ref: ReferenceCatalog, draft: Quote
+) -> None:
+    quotes.update_delivery(session, _quote_id(draft), DeliveryInput())
+
+    stored = _reread(session, draft)
+    assert (stored.delivery_date, stored.delivery_time) == (None, None)
+    assert (stored.delivery_mode, stored.delivery_address) == (None, None)
+    assert not stored.delivery_mode_needs_review
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param({"date": "2026-02-30"}, id="fecha_inexistente"),
+        pytest.param({"date": "28/11/2026"}, id="fecha_en_otro_formato"),
+        pytest.param({"date": "mañana"}, id="fecha_en_palabras"),
+        pytest.param({"time": "25:00"}, id="hora_25"),
+        pytest.param({"time": "15:60"}, id="minuto_60"),
+        pytest.param({"time": "3 pm"}, id="hora_en_palabras"),
+        pytest.param({"mode": "envio"}, id="modalidad_desconocida"),
+        pytest.param({"address": "x" * 201}, id="direccion_larga"),
+    ],
+)
+def test_la_entrega_rechaza_datos_invalidos(fields: dict[str, str]) -> None:
+    with pytest.raises(ValidationError):
+        DeliveryInput.model_validate(fields)
+
+
+def test_la_entrega_acepta_la_direccion_de_200_caracteres() -> None:
+    assert DeliveryInput(address="x" * 200).address == "x" * 200

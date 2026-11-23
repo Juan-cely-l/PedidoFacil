@@ -630,3 +630,230 @@ def test_agregar_a_una_cotizacion_inexistente_responde_404(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "La cotización no existe"}
+
+
+# Historia 4: corregir el borrador
+
+
+def _draft(app: FastAPI, ref: ReferenceCatalog, **fields: Any) -> int:
+    """Una lista (2 tortas medianas) y las tres por revisar de `_pending_lines`."""
+    return _save_quote(app, _ready_line(ref), *_pending_lines(ref), **fields)
+
+
+def _line_ids(app: FastAPI, quote_id: int) -> list[int]:
+    return [line.id for line in _stored_lines(app, quote_id) if line.id is not None]
+
+
+def _form_for(html: str, action: str) -> str:
+    marker = f'action="{action}"'
+    assert marker in html, action
+    return html.partition(marker)[2].partition("</form>")[0]
+
+
+def test_cada_linea_tiene_su_formulario_de_edicion_y_de_eliminacion(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _draft(auth_app, ref)
+    ready, *pending = _line_ids(auth_app, quote_id)
+
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    edit = _form_for(html, f"/cotizaciones/{quote_id}/lineas/{ready}")
+    assert re.search(rf'<option[^>]*value="{ref.torta_id}:{ref.mediana_id}"[^>]*\bselected\b', edit)
+    assert re.search(r'<input[^>]*name="quantity"[^>]*value="2"', edit)
+    _form_for(html, f"/cotizaciones/{quote_id}/lineas/{ready}/eliminar")
+    for line_id in pending:
+        form = _form_for(html, f"/cotizaciones/{quote_id}/lineas/{line_id}")
+        assert re.search(r'<select[^>]*name="item"', form)
+        _form_for(html, f"/cotizaciones/{quote_id}/lineas/{line_id}/eliminar")
+    assert not re.search(r'name="(unit_)?price"', html)
+
+
+def test_una_linea_sin_presentacion_muestra_el_producto_que_identifico(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    # Escenario 2.2: el producto ya está identificado; solo falta elegir la presentación.
+    quote_id = _draft(auth_app, ref)
+
+    row = _row_with(client.get(f"/cotizaciones/{quote_id}").text, "una torta de chocolate")
+
+    assert "Falta la presentación" in row
+    assert "Torta de chocolate" in row.replace("una torta de chocolate", "")
+
+
+def test_cambiar_la_cantidad_redirige_y_recalcula_subtotal_y_total(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _draft(auth_app, ref)
+    ready = _line_ids(auth_app, quote_id)[0]
+    data = {"item": f"{ref.torta_id}:{ref.mediana_id}", "quantity": "3"}
+
+    response = client.post(
+        f"/cotizaciones/{quote_id}/lineas/{ready}", data=data, follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith(f"/cotizaciones/{quote_id}")
+    html = client.get(f"/cotizaciones/{quote_id}").text
+    assert "$ 135.000" in html.partition("<tfoot>")[2].partition("</tfoot>")[0]
+
+
+def test_resolver_las_lineas_por_revisar_quita_los_avisos(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _draft(auth_app, ref)
+    for line_id in _line_ids(auth_app, quote_id)[1:]:
+        data = {"item": str(ref.cafe_id), "quantity": "1"}
+        response = client.post(
+            f"/cotizaciones/{quote_id}/lineas/{line_id}", data=data, follow_redirects=False
+        )
+        assert response.status_code == 303
+
+    html = client.get(f"/cotizaciones/{quote_id}").text
+
+    for notice in ("Incompleta", "Por revisar", "No incluye las líneas por revisar"):
+        assert notice not in html
+    assert (
+        "$ 100.500" in html.partition("<tfoot>")[2].partition("</tfoot>")[0]
+    )  # 90.000 más 3 cafés de 3.500
+
+
+def test_eliminar_una_linea_redirige_y_baja_el_total(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _save_quote(auth_app, _ready_line(ref))
+    ready = _line_ids(auth_app, quote_id)[0]
+
+    response = client.post(
+        f"/cotizaciones/{quote_id}/lineas/{ready}/eliminar", follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    assert _stored_lines(auth_app, quote_id) == []
+    assert "Esta cotización aún no tiene productos" in client.get(f"/cotizaciones/{quote_id}").text
+
+
+def test_un_precio_enviado_al_editar_se_ignora(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _draft(auth_app, ref)
+    ready = _line_ids(auth_app, quote_id)[0]
+    data = {
+        "item": f"{ref.torta_id}:{ref.grande_id}",
+        "quantity": "1",
+        "unit_price": "1",
+        "price": "1",
+    }
+
+    client.post(f"/cotizaciones/{quote_id}/lineas/{ready}", data=data, follow_redirects=False)
+
+    assert _stored_lines(auth_app, quote_id)[0].unit_price == 60000
+
+
+@pytest.mark.parametrize("quantity", ["0", "-1", "abc"])
+def test_una_cantidad_no_valida_al_editar_responde_422_sin_cambiar_la_linea(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, quantity: str
+) -> None:
+    quote_id = _draft(auth_app, ref)
+    ready = _line_ids(auth_app, quote_id)[0]
+    data = {"item": f"{ref.torta_id}:{ref.mediana_id}", "quantity": quantity}
+
+    response = client.post(f"/cotizaciones/{quote_id}/lineas/{ready}", data=data)
+
+    assert response.status_code == 422
+    form = _form_for(response.text, f"/cotizaciones/{quote_id}/lineas/{ready}")
+    assert "La cantidad debe ser un número entero entre 1 y 999" in form
+    assert f'value="{quantity}"' in form
+    assert _stored_lines(auth_app, quote_id)[0].quantity == 2
+
+
+def test_un_item_no_cotizable_al_editar_responde_422(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    quote_id = _draft(auth_app, ref)
+    pending = _line_ids(auth_app, quote_id)[1]
+
+    response = client.post(
+        f"/cotizaciones/{quote_id}/lineas/{pending}", data={"item": "9999", "quantity": "1"}
+    )
+
+    assert response.status_code == 422
+    form = _form_for(response.text, f"/cotizaciones/{quote_id}/lineas/{pending}")
+    assert "Ese producto ya no está disponible en el catálogo" in form
+
+
+@pytest.mark.parametrize("action", ["", "/eliminar"], ids=["editar", "eliminar"])
+def test_una_linea_de_otra_cotizacion_responde_404(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, action: str
+) -> None:
+    quote_id = _draft(auth_app, ref)
+    other = _save_quote(auth_app, _ready_line(ref))
+    foreign = _line_ids(auth_app, other)[0]
+    data = {"item": str(ref.cafe_id), "quantity": "5"}
+
+    response = client.post(f"/cotizaciones/{quote_id}/lineas/{foreign}{action}", data=data)
+
+    assert response.status_code == 404
+    assert [line.quantity for line in _stored_lines(auth_app, other)] == [2]
+
+
+def test_guardar_la_entrega_la_muestra_y_quita_por_confirmar(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog
+) -> None:
+    flags = {
+        "delivery_date_needs_review": True,
+        "delivery_time_needs_review": True,
+        "delivery_mode_needs_review": True,
+    }
+    quote_id = _save_quote(auth_app, _ready_line(ref), **flags)
+    data = {"date": "2026-11-28", "time": "15:30", "mode": "domicilio", "address": "Calle 1"}
+
+    response = client.post(f"/cotizaciones/{quote_id}/entrega", data=data, follow_redirects=False)
+
+    assert response.status_code == 303
+    delivery = client.get(f"/cotizaciones/{quote_id}").text.partition("<h2>Entrega</h2>")[2]
+    for shown in ("28/11/2026", "15:30", "Domicilio", "Calle 1"):
+        assert shown in delivery
+    assert "Por confirmar" not in delivery
+
+
+ENTREGA_VALIDA = {"date": "2026-11-28", "time": "15:30", "mode": "recoger", "address": "Calle 1"}
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("date", "2026-02-30", "Escribe una fecha válida"),
+        ("time", "25:00", "Escribe una hora válida (HH:MM)"),
+        ("address", "x" * 201, "La dirección admite máximo 200 caracteres"),
+    ],
+    ids=["fecha", "hora", "direccion"],
+)
+def test_una_entrega_invalida_responde_422_con_lo_escrito_sin_cambiar_nada(
+    client: TestClient, auth_app: FastAPI, ref: ReferenceCatalog, case: tuple[str, str, str]
+) -> None:
+    field, value, message = case
+    quote_id = _save_quote(auth_app, _ready_line(ref), delivery_address="Calle 10")
+    data = {**ENTREGA_VALIDA, field: value}
+
+    response = client.post(f"/cotizaciones/{quote_id}/entrega", data=data)
+
+    assert response.status_code == 422
+    form = _form_for(response.text, f"/cotizaciones/{quote_id}/entrega")
+    assert message in form
+    # Lo escrito no se pierde, ni lo inválido ni lo demás.
+    for name, typed in data.items():
+        if name == "mode":
+            assert re.search(r'<option[^>]*value="recoger"[^>]*\bselected\b', form)
+        else:
+            assert f'value="{typed}"' in form, name
+    with Session(auth_app.state.engine) as session:
+        stored = session.get(Quote, quote_id)
+        assert stored is not None
+        assert (stored.delivery_date, stored.delivery_address) == (None, "Calle 10")
+
+
+def test_la_entrega_de_una_cotizacion_inexistente_responde_404(client: TestClient) -> None:
+    response = client.post("/cotizaciones/999/entrega", data={"date": ""})
+
+    assert response.status_code == 404

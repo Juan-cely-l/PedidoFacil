@@ -233,3 +233,42 @@ def add_line(
         request.app.url_path_for("quote_detail", quote_id=quote_id),
         status_code=status.HTTP_303_SEE_OTHER,
     )
+
+
+@router.post(
+    "/{quote_id}/lineas/{line_id}",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "La cotización o la línea no existen"},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Línea inválida"},
+    },
+)
+def update_line(quote_id: int, line_id: int) -> Response:
+    """Corrige una línea y redirige al detalle."""
+    raise NotImplementedError
+
+
+@router.post(
+    "/{quote_id}/lineas/{line_id}/eliminar",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    responses={status.HTTP_404_NOT_FOUND: {"description": "La cotización o la línea no existen"}},
+)
+def remove_line(quote_id: int, line_id: int) -> Response:
+    """Elimina una línea y redirige al detalle."""
+    raise NotImplementedError
+
+
+@router.post(
+    "/{quote_id}/entrega",
+    response_class=HTMLResponse,
+    status_code=status.HTTP_303_SEE_OTHER,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": QUOTE_NOT_FOUND_MESSAGE},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Entrega inválida"},
+    },
+)
+def update_delivery(quote_id: int) -> Response:
+    """Guarda la entrega y redirige al detalle."""
+    raise NotImplementedError

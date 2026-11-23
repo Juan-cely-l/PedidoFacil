@@ -302,20 +302,20 @@ líneas «Por revisar» y el total se recalcula sin que él haga cuentas.
 
 ### Pruebas de la Historia 4 (rojo) ⚠️
 
-- [ ] T044 [P] [US4] Ampliar `tests/unit/test_quote_service.py` (data-model.md «Transiciones de una línea»):
+- [x] T044 [P] [US4] Ampliar `tests/unit/test_quote_service.py` (data-model.md «Transiciones de una línea»):
   - `update_line` con solo la cantidad de 2 a 3: conserva `unit_price`; el total pasa de `90000` a `135000` (SC-007).
   - `update_line` sobre una línea `por_revisar` con un `item` cotizable: pasa a `lista`, copia la etiqueta y el precio vigentes y limpia `review_reason`.
   - `update_line` cambiando la variante de Mediana a Grande: vuelve a copiar la etiqueta y el precio (`60000`).
   - `remove_line` quita la línea y el total baja; una línea de otra cotización lanza `QuoteLineNotFoundError`.
   - `update_delivery` guarda fecha, hora, modalidad y dirección, y pone en `False` las tres marcas de revisión (fecha, hora y modalidad).
   - **Precio conservado (FR-015)**: tras cotizar, cambiar el precio del producto en el catálogo no cambia la línea existente; editar su producto o agregar una línea nueva toma el precio nuevo.
-- [ ] T045 [P] [US4] Ampliar `tests/integration/test_quote_pages.py`:
+- [x] T045 [P] [US4] Ampliar `tests/integration/test_quote_pages.py`:
   - `POST /cotizaciones/{id}/lineas/{line_id}`, `…/eliminar` y `…/entrega` responden `303` y el detalle refleja el cambio y el total nuevo.
   - **Validación**: cantidad `0`, `-1` o `"abc"` → `422` con «La cantidad debe ser un número entero entre 1 y 999»; fecha `2026-02-30` → `422` con «Escribe una fecha válida»; hora `25:00` → `422` con «Escribe una hora válida (HH:MM)». El borrador no cambia.
   - **Precio ignorado (FR-014)**: un `POST` de línea con `unit_price=1` y `price=1` guarda el precio del catálogo.
   - Una línea de otra cotización → `404`.
   - Cada fila tiene sus formularios de edición y eliminación, y las «Por revisar» un `<select>` para elegir el ítem.
-- [ ] T046 [US4] Esqueletos con `raise NotImplementedError`: `update_line`, `remove_line`, `update_delivery`, `QuoteLineNotFoundError` y el modelo `DeliveryInput` (`date` «YYYY-MM-DD o vacío», `time` «HH:MM o vacío», `mode` «domicilio, recoger o vacío», `address` «≤ 200 o vacío»); las tres rutas en `app/routers/quotes.py`.
+- [x] T046 [US4] Esqueletos con `raise NotImplementedError`: `update_line`, `remove_line`, `update_delivery`, `QuoteLineNotFoundError` y el modelo `DeliveryInput` (`date` «YYYY-MM-DD o vacío», `time` «HH:MM o vacío», `mode` «domicilio, recoger o vacío», `address` «≤ 200 o vacío»); las tres rutas en `app/routers/quotes.py`.
 
 **⛔ ALTO — revisión de la fase roja de la Historia 4.** Ejecutar `uv run pytest`, mostrar que
 cada prueba nueva falla por la razón esperada, detenerse y esperar la aprobación del autor.

@@ -20,6 +20,7 @@ from app.models.quote import (
     MAX_QUANTITY,
     MESSAGE_MAX_LENGTH,
     AiOutcome,
+    DeliveryInput,
     DeliveryMode,
     LineInput,
     LineStatus,
@@ -81,6 +82,10 @@ class QuoteNotFoundError(Exception):
 
 class ItemNotQuotableError(Exception):
     """El ítem elegido no es cotizable hoy."""
+
+
+class QuoteLineNotFoundError(Exception):
+    """La línea no existe o es de otra cotización."""
 
 
 def build_lines(extraction: QuoteExtraction, items: list[QuotableItem]) -> list[LineDraft]:
@@ -314,3 +319,18 @@ def item_key(item: QuotableItem) -> str:
     if item.variant_id is None:
         return str(item.product_id)
     return f"{item.product_id}:{item.variant_id}"
+
+
+def update_line(session: Session, quote_id: int, line_id: int, data: LineInput) -> QuoteLine:
+    """Cambia el ítem o la cantidad de una línea; el precio sale del catálogo."""
+    raise NotImplementedError
+
+
+def remove_line(session: Session, quote_id: int, line_id: int) -> None:
+    """Quita una línea de la cotización."""
+    raise NotImplementedError
+
+
+def update_delivery(session: Session, quote_id: int, data: DeliveryInput) -> Quote:
+    """Guarda la entrega que corrigió el dueño y quita las marcas «por confirmar»."""
+    raise NotImplementedError

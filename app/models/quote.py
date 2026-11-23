@@ -155,3 +155,15 @@ class LineInput(BaseModel):
 
     item: Annotated[str, StringConstraints(pattern=_ITEM_PATTERN)]
     quantity: Annotated[int, InputField(ge=1, le=MAX_QUANTITY)]
+
+
+class DeliveryInput(BaseModel):
+    """Entrega que corrige el dueño: textos del formulario, vacíos si no hay dato.
+
+    Esqueleto de la Historia 4: todavía no valida.
+    """
+
+    date: str = ""
+    time: str = ""
+    mode: str = ""
+    address: str = ""
