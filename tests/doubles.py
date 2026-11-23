@@ -1,18 +1,35 @@
 """Dobles de prueba compartidos."""
 
+import asyncio
 import base64
 import json
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any, NoReturn
 
 import httpx2  # el cliente HTTP de TestClient (llega con fastapi[standard])
 from fastapi import Request
 from fastapi.testclient import TestClient
 from itsdangerous import BadSignature, TimestampSigner
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    ModelResponse,
+    ToolCallPart,
+    UserPromptPart,
+)
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 from starlette.responses import RedirectResponse, Response
 
+from app.models.catalog import ProductInput, VariantInput, VariantKind
+from app.services import catalog
 from app.services.identity import LoginFailed, VerifiedIdentity
+from app.services.quote_ai import QuoteExtraction
+from tests.banco_mensajes import CasoBanco
 
 # Mensaje con credenciales, como el que daría el controlador real: nunca debe filtrarse.
 LEAKY_DB_ERROR = "no se pudo conectar a postgresql://usuario:clave@host/db"
@@ -87,3 +104,157 @@ def log_in(client: TestClient, next_path: str | None = None) -> httpx2.Response:
     start = client.get("/login/google", params=params, follow_redirects=False)
     assert start.status_code == 302, start.text
     return client.get(start.headers["location"], follow_redirects=False)
+
+
+# Cotización con IA (PED-16): modelos simulados. Ninguno llama a Gemini (constitución II).
+
+ModelFunction = Callable[[list[ModelMessage], AgentInfo], Awaitable[ModelResponse]]
+
+EMPTY_EXTRACTION: dict[str, object] = {
+    "lines": [],
+    "delivery_date": None,
+    "delivery_time": None,
+    "delivery_mode": None,
+    "delivery_address": None,
+}
+
+
+class ScriptedModel(FunctionModel):
+    """`FunctionModel` que cuenta sus llamadas en `calls` y guarda lo que recibió.
+
+    Las pruebas de validación lo usan para comprobar que la IA no se consultó (`calls == 0`), y
+    las de instrucciones, para leer lo que se le envió (`requests`).
+    """
+
+    def __init__(self, function: ModelFunction, *, model_name: str = "modelo-falso") -> None:
+        self.calls = 0
+        self.requests: list[ModelRequest] = []
+
+        async def counted(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            self.calls += 1
+            self.requests.extend(m for m in messages if isinstance(m, ModelRequest))
+            return await function(messages, info)
+
+        super().__init__(counted, model_name=model_name)
+
+    @property
+    def user_prompt(self) -> str:
+        """El texto de usuario de la última petición: el catálogo y el mensaje del cliente."""
+        parts = [
+            part.content
+            for part in self.requests[-1].parts
+            if isinstance(part, UserPromptPart) and isinstance(part.content, str)
+        ]
+        return "\n".join(parts)
+
+
+def _output_call(info: AgentInfo, payload: dict[str, object]) -> ModelResponse:
+    """Respuesta que entrega `payload` como salida estructurada del agente."""
+    return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, payload)])
+
+
+def extraction_model(payload: dict[str, object]) -> ScriptedModel:
+    """Modelo que responde siempre con `payload` como extracción (válida o no)."""
+
+    async def respond(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return _output_call(info, payload)
+
+    return ScriptedModel(respond)
+
+
+def slow_model(seconds: float) -> ScriptedModel:
+    """Modelo que tarda `seconds` antes de responder una extracción vacía."""
+
+    async def respond(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        await asyncio.sleep(seconds)
+        return _output_call(info, EMPTY_EXTRACTION)
+
+    return ScriptedModel(respond)
+
+
+def raising_model(error: BaseException) -> ScriptedModel:
+    """Modelo que lanza `error` al consultarlo."""
+
+    async def respond(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise error
+
+    return ScriptedModel(respond)
+
+
+def failing_model(status_code: int = 503) -> ScriptedModel:
+    """Modelo que responde con un error HTTP del proveedor (saturación, cuota…)."""
+
+    async def respond(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise ModelHTTPError(status_code, "modelo-falso")
+
+    return ScriptedModel(respond)
+
+
+def extraction_from_bank(caso: CasoBanco) -> dict[str, object]:
+    """La extracción que daría una IA perfecta para un caso del banco (research R14).
+
+    Los no reconocidos van con `product_id=None`; el mensaje que no es un pedido, sin líneas.
+    Nunca lleva precios: el banco no los tiene.
+    """
+    lines = [
+        {
+            "customer_text": caso.texto[:200],
+            "product_id": item.product_id,
+            "variant_id": item.variant_id,
+            "quantity": item.quantity,
+        }
+        for item in caso.esperado
+    ]
+    return {**EMPTY_EXTRACTION, "lines": lines}
+
+
+def quote_agent(model: ScriptedModel) -> Agent[None, QuoteExtraction]:
+    """Agente de cotización sobre un modelo simulado (lo que recibe el servicio)."""
+    return Agent(model, output_type=QuoteExtraction)
+
+
+def line_payload(
+    product_id: int | None, variant_id: int | None, quantity: int | None, text: str = "pedido"
+) -> dict[str, object]:
+    """Una línea de la extracción simulada. Nunca lleva precio (principio V)."""
+    return {
+        "customer_text": text,
+        "product_id": product_id,
+        "variant_id": variant_id,
+        "quantity": quantity,
+    }
+
+
+@dataclass(frozen=True)
+class ReferenceCatalog:
+    """Ids del catálogo de referencia de las pruebas de cotización (tasks.md, convenciones)."""
+
+    torta_id: int
+    mediana_id: int
+    grande_id: int
+    cafe_id: int
+
+
+def seed_reference_catalog(session: Session) -> ReferenceCatalog:
+    """Crea «Torta de chocolate» (Mediana 45.000, Grande 60.000) y «Café» (3.500)."""
+    torta = catalog.create_product(session, ProductInput(name="Torta de chocolate", price=45000))
+    mediana = catalog.add_variant(
+        session, _id(torta.id), VariantInput(kind=VariantKind.TAMANO, value="Mediana")
+    )
+    grande = catalog.add_variant(
+        session,
+        _id(torta.id),
+        VariantInput(kind=VariantKind.TAMANO, value="Grande", price=60000),
+    )
+    cafe = catalog.create_product(session, ProductInput(name="Café", price=3500))
+    return ReferenceCatalog(
+        torta_id=_id(torta.id),
+        mediana_id=_id(mediana.id),
+        grande_id=_id(grande.id),
+        cafe_id=_id(cafe.id),
+    )
+
+
+def _id(value: int | None) -> int:
+    assert value is not None
+    return value

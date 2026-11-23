@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Cotización n.º {{ quote.id }} · PedidoFácil{% endblock %}
+{% block content %}
+<hgroup>
+  <h1>Cotización n.º {{ quote.id }}</h1>
+  <p>{{ quote.status | capitalize }} · creada el {{ quote.created_at | colombia }}</p>
+  {% if pending %}<p><mark>Incompleta: {{ pending }} línea(s) por revisar</mark></p>{% endif %}
+</hgroup>
+{% if notice %}<p role="status"><mark>{{ notice }}</mark></p>{% endif %}
+
+<article>
+  <header>Mensaje del cliente</header>
+  <p style="white-space: pre-wrap">{{ quote.customer_message }}</p>
+</article>
+
+<h2>Productos</h2>
+{% if lines %}
+<div class="overflow-auto">
+  <table class="apilable">
+    <thead>
+      <tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Acciones</th></tr>
+    </thead>
+    <tbody>
+      {% for row in lines %}
+      <tr>
+        {% if row.reason %}
+        <td>
+          <mark>Por revisar</mark> {{ row.reason }}
+          {% if row.product_name %}<br><strong>{{ row.product_name }}</strong>{% endif %}
+          {% if row.line.customer_text %}<br><q>{{ row.line.customer_text }}</q>{% endif %}
+        </td>
+        <td data-label="Cantidad">{{ row.line.quantity or "—" }}</td>
+        <td data-label="Precio unitario">—</td>
+        <td data-label="Subtotal">—</td>
+        {% else %}
+        <td>
+          {{ row.line.label }}
+          {% if row.line.customer_text %}<br><small><q>{{ row.line.customer_text }}</q></small>{% endif %}
+        </td>
+        <td data-label="Cantidad">
+          {{ row.line.quantity }}
+          {% if row.line.quantity_assumed %}<br><small>Cantidad supuesta: confírmala</small>{% endif %}
+        </td>
+        <td data-label="Precio unitario">{{ row.line.unit_price | cop }}</td>
+        <td data-label="Subtotal">{{ row.subtotal | cop }}</td>
+        {% endif %}
+        <td>
+          <details{% if row.errors %} open{% endif %}>
+            <summary>{{ "Elegir producto" if row.reason else "Corregir" }}</summary>
+            <form method="post" action="/cotizaciones/{{ quote.id }}/lineas/{{ row.line.id }}">
+              <select name="item" aria-label="Producto" required{% if row.errors.item %} aria-invalid="true"{% endif %}>
+                <option value="">Elige un producto</option>
+                {% for option in options %}
+                <option value="{{ option.value }}"{% if option.value == row.form.item %} selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+              </select>
+              {% if row.errors.item %}<small>{{ row.errors.item }}</small>{% endif %}
+              <input name="quantity" aria-label="Cantidad" value="{{ row.form.quantity }}" inputmode="numeric" required{% if row.errors.quantity %} aria-invalid="true"{% endif %}>
+              {% if row.errors.quantity %}<small>{{ row.errors.quantity }}</small>{% endif %}
+              <button type="submit">Guardar</button>
+            </form>
+          </details>
+          <form method="post" action="/cotizaciones/{{ quote.id }}/lineas/{{ row.line.id }}/eliminar">
+            <button type="submit" class="secondary outline">Eliminar</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <th colspan="3">
+          Total
+          {% if pending %}<br><small>No incluye las líneas por revisar</small>{% endif %}
+        </th>
+        <th>{{ total | cop }}</th>
+        <th></th>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<p>Esta cotización aún no tiene productos.</p>
+{% endif %}
+
+<h3>Agregar producto</h3>
+{% if options %}
+<form method="post" action="/cotizaciones/{{ quote.id }}/lineas">
+  <label>Producto
+    <select name="item" required{% if errors.item %} aria-invalid="true" aria-describedby="item-error"{% endif %}>
+      <option value="">Elige un producto</option>
+      {% for option in options %}
+      <option value="{{ option.value }}"{% if option.value == form.item %} selected{% endif %}>{{ option.label }}</option>
+      {% endfor %}
+    </select>
+    {% if errors.item %}<small id="item-error">{{ errors.item }}</small>{% endif %}
+  </label>
+  <label>Cantidad
+    <input name="quantity" value="{{ form.quantity }}" inputmode="numeric" required{% if errors.quantity %} aria-invalid="true" aria-describedby="quantity-error"{% endif %}>
+    {% if errors.quantity %}<small id="quantity-error">{{ errors.quantity }}</small>{% endif %}
+  </label>
+  <button type="submit">Agregar</button>
+</form>
+{% else %}
+{% if errors.item %}<p role="alert">{{ errors.item }}</p>{% endif %}
+<p><a href="/productos/nuevo">Primero crea productos en el catálogo</a></p>
+{% endif %}
+
+<h2>Entrega</h2>
+<dl>
+  <dt>Fecha</dt>
+  <dd>
+    {{ quote.delivery_date.strftime("%d/%m/%Y") if quote.delivery_date else "Sin fecha" }}
+    {% if quote.delivery_date_needs_review %}<mark>Por confirmar</mark>{% endif %}
+  </dd>
+  <dt>Hora</dt>
+  <dd>
+    {{ quote.delivery_time.strftime("%H:%M") if quote.delivery_time else "Sin hora" }}
+    {% if quote.delivery_time_needs_review %}<mark>Por confirmar</mark>{% endif %}
+  </dd>
+  <dt>Modalidad</dt>
+  <dd>
+    {{ quote.delivery_mode | capitalize if quote.delivery_mode else "Sin modalidad" }}
+    {% if quote.delivery_mode_needs_review %}<mark>Por confirmar</mark>{% endif %}
+  </dd>
+  <dt>Dirección</dt>
+  <dd>{{ quote.delivery_address or "Sin dirección" }}</dd>
+</dl>
+<details{% if delivery_errors %} open{% endif %}>
+  <summary>Corregir la entrega</summary>
+  <form method="post" action="/cotizaciones/{{ quote.id }}/entrega">
+    <label>Fecha de entrega
+      <input type="date" name="date" value="{{ delivery_form.date }}"{% if delivery_errors.date %} aria-invalid="true"{% endif %}>
+      {% if delivery_errors.date %}<small>{{ delivery_errors.date }}</small>{% endif %}
+    </label>
+    <label>Hora de entrega
+      <input type="time" name="time" value="{{ delivery_form.time }}"{% if delivery_errors.time %} aria-invalid="true"{% endif %}>
+      {% if delivery_errors.time %}<small>{{ delivery_errors.time }}</small>{% endif %}
+    </label>
+    <label>Modalidad de entrega
+      <select name="mode"{% if delivery_errors.mode %} aria-invalid="true"{% endif %}>
+        <option value="">Sin definir</option>
+        <option value="domicilio"{% if delivery_form.mode == "domicilio" %} selected{% endif %}>Domicilio</option>
+        <option value="recoger"{% if delivery_form.mode == "recoger" %} selected{% endif %}>Recoger</option>
+      </select>
+      {% if delivery_errors.mode %}<small>{{ delivery_errors.mode }}</small>{% endif %}
+    </label>
+    <label>Dirección de entrega
+      <input name="address" value="{{ delivery_form.address }}"{% if delivery_errors.address %} aria-invalid="true"{% endif %}>
+      {% if delivery_errors.address %}<small>{{ delivery_errors.address }}</small>{% endif %}
+    </label>
+    <button type="submit">Guardar entrega</button>
+  </form>
+</details>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Cotizaciones · PedidoFácil{% endblock %}
+{% block content %}
+<hgroup>
+  <h1>Cotizaciones</h1>
+  <p><a href="/cotizaciones/nueva" role="button">Nueva cotización</a></p>
+</hgroup>
+{% if rows %}
+<ul>
+  {% for row in rows %}
+  <li>
+    <a href="/cotizaciones/{{ row.quote.id }}">Cotización n.º {{ row.quote.id }}</a>
+    · {{ row.quote.created_at | colombia }}
+    · {{ row.quote.status | capitalize }}
+    · {{ row.total | cop }}
+    {% if row.pending %}<mark>{{ row.pending }} por revisar</mark>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>Aún no hay cotizaciones. <a href="/cotizaciones/nueva">Nueva cotización</a></p>
+{% endif %}
+{% endblock %}
