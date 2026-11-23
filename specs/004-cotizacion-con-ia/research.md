@@ -238,6 +238,21 @@ lo que indica un tope diario cercano a esa cifra. **Queda descartado por cuota, 
 (enmienda del 23). Como era el único modelo de otra familia, **no queda ningún respaldo que cumpla
 la regla**: lo coherente es `GEMINI_FALLBACK_MODEL=ninguno` en Render.
 
+**Decisión: sin respaldo por defecto.** `gemini_fallback_model` pasa a ser `None` en el código,
+no solo `ninguno` en Render.
+
+- `gemini-3.8-flash` quedó descartado por cuota (hallazgo 1).
+- `gemini-3.5-flash` tampoco sirve de respaldo, aunque responda a veces: con un p50 de 10.191 ms
+  agotaría el presupuesto completo de 10 s antes de contestar.
+- Dejar como valor por defecto un modelo descartado haría que cualquier entorno nuevo, como un
+  revisor que clone el repositorio o un despliegue futuro, lo usara en silencio.
+
+**Cuota por minuto según AI Studio** (dato del autor, 2026-11-23): `gemini-3.5-flash-lite` admite
+15 peticiones por minuto, frente a 5 de `gemini-3.8-flash` y de `gemini-3.6-flash`. Son tres
+veces más de margen, y es coherente con que fuera el único que respondía. La medición enviaba
+como mucho 4 por minuto a cada modelo, así que el 429 de 3.8 en la petición 17 apunta al **tope
+diario**, no al de por minuto. N, el tope diario de flash-lite, sigue pendiente.
+
 **Hallazgo 2: la congestión persiste dos días consecutivos.** No fue un episodio aislado del 19 de
 noviembre. Para el producto, **el camino manual no es una red de seguridad para un caso raro, sino
 parte del funcionamiento normal** en las condiciones observadas: del 12 % (23) al 29 % (22) de las

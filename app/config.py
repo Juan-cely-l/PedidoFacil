@@ -49,7 +49,10 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     # Cotización con IA (PED-16): los modelos se cambian según la medición (research.md R2).
     gemini_model: str = "gemini-3.5-flash-lite"
-    gemini_fallback_model: str | None = "gemini-3.8-flash"
+    # Sin respaldo por defecto: la medición descartó gemini-3.8-flash y gemini-3.5-flash no cabe
+    # en el tiempo de espera (research.md R2). Un entorno nuevo no debe usar en silencio un
+    # modelo descartado.
+    gemini_fallback_model: str | None = None
     ai_timeout_seconds: float = Field(default=10, gt=0, le=_MAX_AI_TIMEOUT_SECONDS)
     # Login del dueño con Google OAuth 2.0 / OpenID Connect (ADR 0003).
     google_client_id: str | None = None
