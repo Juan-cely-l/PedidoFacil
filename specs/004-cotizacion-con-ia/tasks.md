@@ -282,10 +282,10 @@ Después, commit `test(PED-16): pruebas del camino manual`.
 
 ### Implementación de la Historia 3 (verde)
 
-- [ ] T040 [US3] En `quote_message` (`app/services/quotes.py`), traducir las fallas a `AiOutcome` según research R4: `TimeoutError` → `timeout`; `ModelHTTPError`, `ModelAPIError` y `ModelRequestTimeout` → `provider_error`; `UnexpectedModelBehavior`, `ValidationError` y cualquier otro `AgentRunError` → `invalid_output`. Guardar el borrador sin líneas y registrar en `pedidofacil.quotes` solo el resultado, el **tipo** de la excepción y la duración (research R11). No capturar `Exception`.
-- [ ] T041 [US3] `LineInput` en `app/models/quote.py` y `add_line` en `app/services/quotes.py`: el precio y la etiqueta salen de `list_quotable_items` en ese momento; la línea queda en la última posición.
-- [ ] T042 [P] [US3] Ruta `POST /cotizaciones/{id}/lineas` en `app/routers/quotes.py`; avisos por `ai_outcome` y formulario «Agregar producto» en `app/templates/quotes/detail.html`.
-- [ ] T043 [US3] Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): borrador manual cuando la IA tarda o falla`.
+- [x] T040 [US3] En `quote_message` (`app/services/quotes.py`), traducir las fallas a `AiOutcome` según research R4: `TimeoutError` → `timeout`; `ModelHTTPError`, `ModelAPIError`, `ModelRequestTimeout` y `FallbackExceptionGroup` (fallan principal y respaldo) → `provider_error`; `UnexpectedModelBehavior`, `ValidationError` y cualquier otro `AgentRunError` → `invalid_output`. Guardar el borrador sin líneas y registrar en `pedidofacil.quotes` solo el resultado, el **tipo** de la excepción y la duración (research R11). No capturar `Exception`.
+- [x] T041 [US3] `LineInput` en `app/models/quote.py` y `add_line` en `app/services/quotes.py`: el precio y la etiqueta salen de `list_quotable_items` en ese momento; la línea queda en la última posición.
+- [x] T042 [P] [US3] Ruta `POST /cotizaciones/{id}/lineas` en `app/routers/quotes.py`; avisos por `ai_outcome` y formulario «Agregar producto» en `app/templates/quotes/detail.html`.
+- [x] T043 [US3] Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): borrador manual cuando la IA tarda o falla`.
 
 **Punto de control**: las tres historias P1 están completas; la historia se puede demostrar con
 la IA caída.

@@ -2,7 +2,7 @@
 
 from sqlmodel import Session, col, select
 
-from app.models.quote import Quote
+from app.models.quote import Quote, QuoteLine
 
 
 def save_quote(session: Session, quote: Quote) -> Quote:
@@ -22,3 +22,11 @@ def list_quotes(session: Session) -> list[Quote]:
     """Cotizaciones de la más reciente a la más antigua."""
     statement = select(Quote).order_by(col(Quote.created_at).desc(), col(Quote.id).desc())
     return list(session.exec(statement).all())
+
+
+def save_line(session: Session, line: QuoteLine) -> QuoteLine:
+    """Guarda una línea en su propia transacción y la devuelve con su id."""
+    session.add(line)
+    session.commit()
+    session.refresh(line)
+    return line

@@ -7,10 +7,12 @@ la ruta web y el webhook de Telegram (HU-20) llamen a las mismas funciones (RD-1
 
 import asyncio
 import datetime
+import logging
 import time
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from pydantic_ai import Agent
+from pydantic_ai.exceptions import AgentRunError, FallbackExceptionGroup, ModelAPIError
 from sqlmodel import Session
 
 from app.models.catalog import QuotableItem
@@ -35,6 +37,12 @@ from app.services.quote_ai import (
     resolve_delivery_date,
     resolve_delivery_time,
 )
+
+logger = logging.getLogger("pedidofacil.quotes")
+
+# Solo la frontera con el proveedor (research.md R4): un error de programación sigue siendo un
+# error. FallbackExceptionGroup va aparte porque no es un AgentRunError.
+_AI_FAILURES = (TimeoutError, AgentRunError, FallbackExceptionGroup, ValidationError)
 
 
 class LineDraft(BaseModel):
@@ -157,6 +165,8 @@ async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan pa
 
     Las validaciones van **antes** de llamar a la IA: un mensaje vacío, demasiado largo o un
     catálogo sin nada cotizable no gastan ninguna petición del proveedor (HU-20).
+
+    Si la IA está desactivada, tarda o falla, guarda igual el borrador, sin líneas (research R4).
     """
     text = message.strip()
     if not text:
@@ -167,16 +177,11 @@ async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan pa
     items = list_quotable_items(session)
     if not items:
         raise NothingToQuoteError
-    if extractor is None:
-        # IA desactivada: Historia 3.
-        raise NotImplementedError
-
-    started = time.monotonic()
-    async with asyncio.timeout(timeout_seconds):
-        result = await extractor.run(render_catalog_prompt(items, text))
-    duration_ms = round((time.monotonic() - started) * 1000)
-
-    extraction = result.output
+    outcome, duration_ms = AiOutcome.DISABLED, None
+    extraction = QuoteExtraction()  # sin IA o con falla: sin líneas ni datos de entrega
+    if extractor is not None:
+        prompt = render_catalog_prompt(items, text)
+        outcome, extraction, duration_ms = await _consult_ai(extractor, prompt, timeout_seconds)
     delivery_date, date_needs_review = resolve_delivery_date(extraction.delivery_date, today)
     delivery_time, time_needs_review = resolve_delivery_time(extraction.delivery_time)
     delivery_address = (extraction.delivery_address or "").strip() or None
@@ -189,7 +194,7 @@ async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan pa
         status=QuoteStatus.BORRADOR,
         customer_message=text,
         created_at=now,
-        ai_outcome=AiOutcome.OK,
+        ai_outcome=outcome,
         ai_duration_ms=duration_ms,
         delivery_date=delivery_date,
         delivery_date_needs_review=date_needs_review,
@@ -203,7 +208,53 @@ async def quote_message(  # noqa: PLR0913  (contrato: today y now se inyectan pa
             for position, draft in enumerate(build_lines(extraction, items), start=1)
         ],
     )
-    return repository.save_quote(session, quote)
+    saved = repository.save_quote(session, quote)
+    if outcome is AiOutcome.OK:
+        # Solo conteos: nunca el mensaje, la dirección ni lo que respondió la IA (R11).
+        logger.info(
+            "Cotización guardada: cotización=%s resultado=%s duración=%s ms líneas=%s "
+            "por revisar=%s",
+            saved.id,
+            outcome.value,
+            duration_ms,
+            len(saved.lines),
+            pending_count(saved),
+        )
+    return saved
+
+
+async def _consult_ai(
+    extractor: Agent[None, QuoteExtraction], prompt: str, timeout_seconds: float
+) -> tuple[AiOutcome, QuoteExtraction, int]:
+    """Consulta la IA con un solo reloj y traduce sus fallas a un resultado (R3 y R4)."""
+    started = time.monotonic()
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            result = await extractor.run(prompt)
+    except _AI_FAILURES as error:
+        outcome, duration_ms = _failure_outcome(error), _elapsed_ms(started)
+        # El tipo y nada más: str(error) y la traza pueden repetir el mensaje del cliente (R11).
+        logger.warning(
+            "Falla de la IA: resultado=%s error=%s duración=%s ms",
+            outcome.value,
+            type(error).__name__,
+            duration_ms,
+        )
+        return outcome, QuoteExtraction(), duration_ms
+    return AiOutcome.OK, result.output, _elapsed_ms(started)
+
+
+def _failure_outcome(error: BaseException) -> AiOutcome:
+    if isinstance(error, TimeoutError):
+        return AiOutcome.TIMEOUT
+    # El grupo del respaldo solo junta errores HTTP: es lo único que activa el respaldo (R3).
+    if isinstance(error, ModelAPIError | FallbackExceptionGroup):
+        return AiOutcome.PROVIDER_ERROR
+    return AiOutcome.INVALID_OUTPUT
+
+
+def _elapsed_ms(started: float) -> int:
+    return round((time.monotonic() - started) * 1000)
 
 
 def get_quote(session: Session, quote_id: int) -> Quote:
@@ -240,5 +291,26 @@ def pending_count(quote: Quote) -> int:
 
 
 def add_line(session: Session, quote_id: int, data: LineInput) -> QuoteLine:
-    """Agrega a mano una línea lista, con el precio vigente del catálogo."""
-    raise NotImplementedError
+    """Agrega a mano una línea lista, con la etiqueta y el precio vigentes del catálogo."""
+    quote = get_quote(session, quote_id)
+    item = next((i for i in list_quotable_items(session) if item_key(i) == data.item), None)
+    if item is None:
+        raise ItemNotQuotableError
+    line = QuoteLine(
+        quote_id=quote_id,
+        position=max((line.position for line in quote.lines), default=0) + 1,
+        status=LineStatus.LISTA,
+        product_id=item.product_id,
+        variant_id=item.variant_id,
+        label=item.label,
+        unit_price=item.unit_price,
+        quantity=data.quantity,
+    )
+    return repository.save_line(session, line)
+
+
+def item_key(item: QuotableItem) -> str:
+    """Referencia de un ítem en `LineInput.item`: «producto» o «producto:variante»."""
+    if item.variant_id is None:
+        return str(item.product_id)
+    return f"{item.product_id}:{item.variant_id}"

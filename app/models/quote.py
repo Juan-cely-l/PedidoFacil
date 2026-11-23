@@ -6,8 +6,10 @@ total no se guardan, se calculan al leer (research.md R9). Ningún precio sale d
 
 import datetime
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
+from pydantic import Field as InputField
 from sqlalchemy import CheckConstraint, Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -16,6 +18,8 @@ CUSTOMER_TEXT_MAX_LENGTH = 200
 LABEL_MAX_LENGTH = 200
 ADDRESS_MAX_LENGTH = 200
 MAX_QUANTITY = 999
+# «<product_id>» o «<product_id>:<variant_id>». [0-9] y no \d, que acepta dígitos no latinos.
+_ITEM_PATTERN = r"^[0-9]+(:[0-9]+)?$"
 
 
 class QuoteStatus(StrEnum):
@@ -147,10 +151,7 @@ class QuoteLine(SQLModel, table=True):
 
 
 class LineInput(BaseModel):
-    """Una línea que el dueño arma a mano: ítem cotizable y cantidad, nunca un precio (FR-014).
+    """Una línea que el dueño arma a mano: ítem cotizable y cantidad, nunca un precio (FR-014)."""
 
-    Esqueleto de la Historia 3: todavía no valida.
-    """
-
-    item: str
-    quantity: int
+    item: Annotated[str, StringConstraints(pattern=_ITEM_PATTERN)]
+    quantity: Annotated[int, InputField(ge=1, le=MAX_QUANTITY)]

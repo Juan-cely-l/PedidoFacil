@@ -165,7 +165,10 @@ variantes y cantidades correctos).
   - `TimeoutError`, del reloj de R3;
   - `ModelAPIError` y sus subclases (`ModelHTTPError`, `ModelRequestTimeout`);
   - `UnexpectedModelBehavior` (salida inválida tras el reintento) y `ValidationError`;
-  - cualquier otra subclase de `AgentRunError`.
+  - cualquier otra subclase de `AgentRunError`;
+  - `FallbackExceptionGroup`, que sale cuando fallan el principal **y** el respaldo
+    (`provider_error`). Va aparte porque es un `ExceptionGroup`, no un `AgentRunError`: sin él,
+    la congestión daría un 500 (encontrado el 2026-11-22).
 
   Los valores de `AiOutcome` son `ok`, `timeout`, `provider_error`, `invalid_output` y `disabled`.
   Con cualquier valor distinto de `ok` se guarda el borrador **sin líneas**, con el mensaje y el
@@ -372,6 +375,8 @@ variantes y cantidades correctos).
   VI).
 - La excepción del proveedor se registra **solo por su tipo**, sin `str(error)`, porque el
   mensaje de un error de validación puede repetir la entrada. Es el mismo criterio de PED-15.
+- **Errores de la base**: el motor usa `hide_parameters=True`, para que una excepción de SQL no
+  repita el mensaje ni la dirección. Es una defensa adicional: no oculta el `DETAIL` de PostgreSQL.
 
 ## R12. `AI_PROVIDER=fake` en local
 

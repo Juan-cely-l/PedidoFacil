@@ -9,12 +9,13 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from pydantic import ValidationError
 from pydantic_ai import Agent
 from sqlmodel import Session
 
 from app.config import Settings, get_app_settings
 from app.db import get_session
-from app.models.quote import ReviewReason
+from app.models.quote import AiOutcome, LineInput, Quote, ReviewReason
 from app.services import quotes
 from app.services.catalog import list_quotable_items
 from app.services.quote_ai import QuoteExtraction
@@ -23,6 +24,19 @@ from app.templating import COLOMBIA, templates
 QUOTE_NOT_FOUND_MESSAGE = "La cotización no existe"
 EMPTY_MESSAGE = "Pega el mensaje del cliente"
 TOO_LONG_MESSAGE = "El mensaje es demasiado largo (máximo 2.000 caracteres)"
+LINE_ERRORS = {
+    "item": "Ese producto ya no está disponible en el catálogo",
+    "quantity": "La cantidad debe ser un número entero entre 1 y 999",
+}
+# Sin detalles técnicos: qué pasó y qué puede hacer el dueño (contracts/quote-pages.md).
+AI_NOTICES = {
+    AiOutcome.TIMEOUT: "La IA no respondió a tiempo: agrega los productos a mano",
+    AiOutcome.PROVIDER_ERROR: (
+        "La IA no está disponible en este momento: agrega los productos a mano"
+    ),
+    AiOutcome.INVALID_OUTPUT: "La IA no entregó una respuesta válida: agrega los productos a mano",
+    AiOutcome.DISABLED: "La IA está desactivada en este ambiente: agrega los productos a mano",
+}
 REVIEW_REASON_LABELS = {
     ReviewReason.NO_RECONOCIDO: "No está en el catálogo",
     ReviewReason.FALTA_VARIANTE: "Falta la presentación",
@@ -136,10 +150,25 @@ async def create_quote(
 )
 def quote_detail(request: Request, session: SessionDep, quote_id: int) -> HTMLResponse:
     """Borrador con sus líneas, precios del catálogo, total y datos de entrega."""
+    return _detail(request, session, _get_quote_or_404(session, quote_id))
+
+
+def _get_quote_or_404(session: Session, quote_id: int) -> Quote:
     try:
-        quote = quotes.get_quote(session, quote_id)
+        return quotes.get_quote(session, quote_id)
     except quotes.QuoteNotFoundError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, QUOTE_NOT_FOUND_MESSAGE) from error
+
+
+def _detail(
+    request: Request,
+    session: Session,
+    quote: Quote,
+    *,
+    form: dict[str, str] | None = None,
+    errors: dict[str, str] | None = None,
+) -> HTMLResponse:
+    """El detalle; con `errors`, responde 422 y conserva lo escrito."""
     lines = [
         {
             "line": line,
@@ -160,7 +189,15 @@ def quote_detail(request: Request, session: SessionDep, quote_id: int) -> HTMLRe
             "lines": lines,
             "total": quotes.quote_total(quote),
             "pending": quotes.pending_count(quote),
+            "notice": AI_NOTICES.get(AiOutcome(quote.ai_outcome)),
+            "options": [
+                {"value": quotes.item_key(item), "label": item.label}
+                for item in list_quotable_items(session)
+            ],
+            "form": form or {"item": "", "quantity": "1"},
+            "errors": errors or {},
         },
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT if errors else status.HTTP_200_OK,
     )
 
 
@@ -173,6 +210,26 @@ def quote_detail(request: Request, session: SessionDep, quote_id: int) -> HTMLRe
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Línea inválida"},
     },
 )
-def add_line(quote_id: int) -> Response:
-    """Agrega una línea a mano y redirige al detalle."""
-    raise NotImplementedError
+def add_line(
+    request: Request,
+    session: SessionDep,
+    quote_id: int,
+    item: Annotated[str, Form()] = "",
+    quantity: Annotated[str, Form()] = "",
+) -> Response:
+    """Agrega una línea a mano, con el precio del catálogo, y redirige al detalle."""
+    quote = _get_quote_or_404(session, quote_id)
+    form = {"item": item, "quantity": quantity}
+    try:
+        quotes.add_line(session, quote_id, LineInput.model_validate(form))
+    except ValidationError as error:
+        fields = {str(detail["loc"][0]) for detail in error.errors()}
+        errors = {field: LINE_ERRORS[field] for field in fields}
+        return _detail(request, session, quote, form=form, errors=errors)
+    except quotes.ItemNotQuotableError:
+        errors = {"item": LINE_ERRORS["item"]}
+        return _detail(request, session, quote, form=form, errors=errors)
+    return RedirectResponse(
+        request.app.url_path_for("quote_detail", quote_id=quote_id),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

@@ -6,6 +6,7 @@
   <p>{{ quote.status | capitalize }} · creada el {{ quote.created_at | colombia }}</p>
   {% if pending %}<p><mark>Incompleta: {{ pending }} línea(s) por revisar</mark></p>{% endif %}
 </hgroup>
+{% if notice %}<p role="status"><mark>{{ notice }}</mark></p>{% endif %}
 
 <article>
   <header>Mensaje del cliente</header>
@@ -55,6 +56,29 @@
 </div>
 {% else %}
 <p>Esta cotización aún no tiene productos.</p>
+{% endif %}
+
+<h3>Agregar producto</h3>
+{% if options %}
+<form method="post" action="/cotizaciones/{{ quote.id }}/lineas">
+  <label>Producto
+    <select name="item" required{% if errors.item %} aria-invalid="true" aria-describedby="item-error"{% endif %}>
+      <option value="">Elige un producto</option>
+      {% for option in options %}
+      <option value="{{ option.value }}"{% if option.value == form.item %} selected{% endif %}>{{ option.label }}</option>
+      {% endfor %}
+    </select>
+    {% if errors.item %}<small id="item-error">{{ errors.item }}</small>{% endif %}
+  </label>
+  <label>Cantidad
+    <input name="quantity" value="{{ form.quantity }}" inputmode="numeric" required{% if errors.quantity %} aria-invalid="true" aria-describedby="quantity-error"{% endif %}>
+    {% if errors.quantity %}<small id="quantity-error">{{ errors.quantity }}</small>{% endif %}
+  </label>
+  <button type="submit">Agregar</button>
+</form>
+{% else %}
+{% if errors.item %}<p role="alert">{{ errors.item }}</p>{% endif %}
+<p><a href="/productos/nuevo">Primero crea productos en el catálogo</a></p>
 {% endif %}
 
 <h2>Entrega</h2>
