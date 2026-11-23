@@ -480,7 +480,8 @@ def test_el_modelo_el_respaldo_y_el_tiempo_de_espera_tienen_valores_por_defecto(
     settings = Settings(_env_file=None, environment="test")
 
     assert settings.gemini_model == "gemini-3.5-flash-lite"
-    assert settings.gemini_fallback_model == "gemini-3.8-flash"
+    # Sin respaldo por defecto: la medición descartó gemini-3.8-flash (research R2).
+    assert settings.gemini_fallback_model is None
     assert settings.ai_timeout_seconds == 10
 
 
@@ -499,7 +500,7 @@ def test_un_respaldo_vacio_cuenta_como_ausente(monkeypatch: pytest.MonkeyPatch) 
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.gemini_fallback_model == "gemini-3.8-flash"
+    assert settings.gemini_fallback_model is None  # el valor por defecto: sin respaldo
 
 
 def test_el_respaldo_no_puede_ser_el_mismo_modelo(monkeypatch: pytest.MonkeyPatch) -> None:
