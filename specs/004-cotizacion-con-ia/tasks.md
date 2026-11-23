@@ -355,10 +355,10 @@ el código.
 
 ## Fase 8: Pulido y verificación final
 
-- [ ] T055 [P] Actualizar `docs/despliegue.md`: `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `AI_TIMEOUT_SECONDS` (tope 15 s) en Render, antes del merge; cómo volver a medir con el script (enlace a research R2); una fila en la tabla de riesgos para «el proveedor de IA está lento o caído», mitigado por el camino manual.
-- [ ] T056 [P] Actualizar `README.md`: `pydantic-ai-slim[google]` en la lista de dependencias y una sección breve «Cotización con IA en local» que remita a quickstart.md (`AI_PROVIDER=fake` por defecto).
-- [ ] T057 Verificación final completa según quickstart.md: `uv run pytest` (cobertura ≥ 80 % con ramas), `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy` y `uv run pre-commit run --all-files`; confirmar que `MENSAJE-CENTINELA` no aparece en la salida de `uv run pytest -s`; recorrer a mano el «Recorrido local sin IA» de quickstart.md, también a 360 px.
-- [ ] T058 Commit `docs(PED-16): documentar la cotización con IA y su despliegue` y avisar al autor para el push. **Sin push ni PR hasta que lo pida.**
+- [x] T055 [P] Actualizar `docs/despliegue.md`: `AI_PROVIDER=gemini`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_FALLBACK_MODEL` y `AI_TIMEOUT_SECONDS` (tope 15 s) en Render, antes del merge; cómo volver a medir con el script (enlace a research R2); una fila en la tabla de riesgos para «el proveedor de IA está lento o caído», mitigado por el camino manual.
+- [x] T056 [P] Actualizar `README.md`: `pydantic-ai-slim[google]` en la lista de dependencias y una sección breve «Cotización con IA en local» que remita a quickstart.md (`AI_PROVIDER=fake` por defecto).
+- [x] T057 Verificación final completa según quickstart.md: `uv run pytest` (cobertura ≥ 80 % con ramas), `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy` y `uv run pre-commit run --all-files`; confirmar que `MENSAJE-CENTINELA` no aparece en la salida de `uv run pytest -s`; recorrer a mano el «Recorrido local sin IA» de quickstart.md, también a 360 px.
+- [x] T058 Commit `docs(PED-16): documentar la cotización con IA y su despliegue` y avisar al autor para el push. **Sin push ni PR hasta que lo pida.**
 
 ---
 

@@ -65,8 +65,11 @@ Variables de entorno:
 | `LOG_LEVEL` | `INFO` |
 | `DATABASE_URL` | Cadena de Neon (`postgresql://…` o `postgresql+psycopg://…`) |
 | `SECRET_KEY` | Generada con el botón **Generate** de Render |
-| `AI_PROVIDER` | `fake` hasta HU-08; luego `gemini` |
-| `GEMINI_API_KEY` | Solo cuando `AI_PROVIDER=gemini` |
+| `AI_PROVIDER` | `gemini` desde HU-08 (PED-16) |
+| `GEMINI_API_KEY` | Clave de Google AI Studio; obligatoria con `AI_PROVIDER=gemini` |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` (el valor por defecto; elegido por medición) |
+| `GEMINI_FALLBACK_MODEL` | `ninguno`: el único respaldo de otra familia, `gemini-3.8-flash`, quedó descartado por cuota |
+| `AI_TIMEOUT_SECONDS` | `10` (el valor por defecto); la app no acepta más de 15 s |
 | `GOOGLE_CLIENT_ID` | ID del cliente OAuth de Google (sección 3) |
 | `GOOGLE_CLIENT_SECRET` | Secreto del mismo cliente OAuth |
 | `OWNER_EMAILS` | Correos autorizados a entrar, separados por comas (por ejemplo, el Gmail del dueño) |
@@ -77,6 +80,15 @@ variables de Google, si `OWNER_EMAILS` queda vacía o si `PUBLIC_BASE_URL` no us
 `PUBLIC_BASE_URL` falta, se usa `RENDER_EXTERNAL_URL`, que Render define solo. Igual conviene
 fijarla, porque determina la URI de vuelta registrada en Google. Esas variables se definen en
 Render **antes** de integrar el PR: si no, el despliegue falla al arrancar.
+
+Desde PED-16 (HU-08), con `AI_PROVIDER=gemini` la app **no arranca** sin `GEMINI_API_KEY`, ni con
+un `AI_TIMEOUT_SECONDS` mayor que 15 o un `GEMINI_FALLBACK_MODEL` igual a `GEMINI_MODEL`. Las
+variables de la IA también se definen **antes** de integrar el PR.
+
+**Volver a medir los modelos**: si el proveedor cambia o la latencia empeora, se repite la
+medición con `scripts/medir_gemini.py`, con el protocolo de
+[research R2](../specs/004-cotizacion-con-ia/research.md#cómo-se-vuelve-a-medir-antes-del-merge-y-cada-vez-que-se-dude).
+El resultado solo cambia `GEMINI_MODEL` o `GEMINI_FALLBACK_MODEL` en Render, sin tocar el código.
 
 ### 3. Login con Google (Google Cloud)
 
@@ -172,6 +184,7 @@ Tras cualquiera de los dos, se verifica con `/health` que el commit reportado es
 | Fecha | Riesgo | Decisión | Estado |
 |---|---|---|---|
 | 2026-11-16 | `/productos` (PED-88, HU-15) queda público y sin login en producción hasta HU-07 (PED-15, Sprint 3): cualquiera con la URL podría crear productos. | Aceptado por el dueño del producto: los precios no son datos sensibles. **Límite explícito**: HU-04 no se despliega a producción sin login (HU-07), porque guarda nombre, teléfono y dirección de clientes. | **Cerrado** con el despliegue de PED-15 (HU-07). Desde ese despliegue, toda ruta de gestión, incluido `/productos`, exige la sesión del dueño (denegar por defecto, verificado por `tests/integration/test_route_protection.py`). El límite de HU-04 queda **levantado**: HU-04 puede desplegarse, porque sus rutas nacen protegidas. |
+| 2026-11-23 | El proveedor de IA está lento o caído: el 22 y el 23 de noviembre, con congestión dos días seguidos, del 12 % al 29 % de las consultas a `gemini-3.5-flash-lite` no obtuvieron respuesta válida en 10 s (research R2). | Aceptado: **el camino manual es parte del funcionamiento normal**, no una excepción. Toda falla de la IA termina en un borrador con el mensaje guardado y un aviso, y el dueño agrega los productos del catálogo a mano (HU-08, historia 3). La cuota gratuita también limita el volumen: con N peticiones diarias, caben N/2 cotizaciones al día. | Abierto: la demanda real se pide a la dueña en la validación (PED-70). |
 
 ## Problemas conocidos
 
@@ -186,4 +199,6 @@ Tras cualquiera de los dos, se verifica con `/health` que el commit reportado es
 | Google muestra `redirect_uri_mismatch` | `PUBLIC_BASE_URL` + `/auth/google/callback` no coincide con una URI registrada | Registrar la URI exacta en Google Cloud (sección 3) o corregir `PUBLIC_BASE_URL` |
 | Google dice que la app no está verificada o bloquea el acceso | La cuenta no está entre los usuarios de prueba de la pantalla de consentimiento | Agregarla en Google Cloud → Pantalla de consentimiento → Usuarios de prueba |
 | «Esta cuenta de Google no tiene acceso» | El correo no está en `OWNER_EMAILS` | Agregarlo a la variable y redesplegar |
+| «La IA no está disponible en este momento» o «no respondió a tiempo» | El proveedor está congestionado (503) o se agotó la cuota diaria (429) | Es el camino manual: agregar los productos a mano. El log `pedidofacil.quotes` dice el tipo de falla |
+| «Exited with status 1» tras integrar PED-16 | `AI_PROVIDER=gemini` sin `GEMINI_API_KEY`, o `AI_TIMEOUT_SECONDS` mayor que 15 | Definirla en Render → Environment |
 | «No se completó el inicio de sesión con Google» al volver | Se rotó `SECRET_KEY` o se reinició el login en otra pestaña | Volver a pulsar «Entrar con Google» |
