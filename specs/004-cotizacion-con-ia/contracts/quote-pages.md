@@ -61,3 +61,5 @@ prueba lo verifica.
 | Ítem ya no cotizable | «Ese producto ya no está disponible en el catálogo» |
 | Fecha inválida | «Escribe una fecha válida» |
 | Hora inválida | «Escribe una hora válida (HH:MM)» |
+| Modalidad desconocida (solo con el formulario manipulado) | «Elige domicilio o recoger» |
+| Dirección de más de 200 caracteres | «La dirección admite máximo 200 caracteres» |

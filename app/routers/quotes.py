@@ -15,13 +15,20 @@ from sqlmodel import Session
 
 from app.config import Settings, get_app_settings
 from app.db import get_session
-from app.models.quote import AiOutcome, LineInput, Quote, ReviewReason
+from app.models.quote import AiOutcome, DeliveryInput, LineInput, Quote, QuoteLine, ReviewReason
 from app.services import quotes
 from app.services.catalog import list_quotable_items
 from app.services.quote_ai import QuoteExtraction
 from app.templating import COLOMBIA, templates
 
 QUOTE_NOT_FOUND_MESSAGE = "La cotización no existe"
+LINE_NOT_FOUND_MESSAGE = "La línea no existe"
+DELIVERY_ERRORS = {
+    "date": "Escribe una fecha válida",
+    "time": "Escribe una hora válida (HH:MM)",
+    "mode": "Elige domicilio o recoger",
+    "address": "La dirección admite máximo 200 caracteres",
+}
 EMPTY_MESSAGE = "Pega el mensaje del cliente"
 TOO_LONG_MESSAGE = "El mensaje es demasiado largo (máximo 2.000 caracteres)"
 LINE_ERRORS = {
@@ -160,15 +167,22 @@ def _get_quote_or_404(session: Session, quote_id: int) -> Quote:
         raise HTTPException(status.HTTP_404_NOT_FOUND, QUOTE_NOT_FOUND_MESSAGE) from error
 
 
-def _detail(
+def _detail(  # noqa: PLR0913  (cada formulario de la página conserva lo escrito)
     request: Request,
     session: Session,
     quote: Quote,
     *,
     form: dict[str, str] | None = None,
     errors: dict[str, str] | None = None,
+    line_forms: dict[int, dict[str, str]] | None = None,
+    line_errors: dict[int, dict[str, str]] | None = None,
+    delivery_form: dict[str, str] | None = None,
+    delivery_errors: dict[str, str] | None = None,
 ) -> HTMLResponse:
-    """El detalle; con `errors`, responde 422 y conserva lo escrito."""
+    """El detalle; con errores en cualquier formulario, responde 422 y conserva lo escrito."""
+    items = list_quotable_items(session)
+    # Nombre del producto de una línea sin presentación (escenario 2.2), desde el catálogo.
+    names = {item.product_id: item.label.partition(" — ")[0] for item in items}
     lines = [
         {
             "line": line,
@@ -178,9 +192,15 @@ def _detail(
                 if line.review_reason
                 else None
             ),
+            "product_name": (
+                names.get(line.product_id) if line.review_reason and line.product_id else None
+            ),
+            "form": (line_forms or {}).get(line.id or 0) or _line_form(line),
+            "errors": (line_errors or {}).get(line.id or 0, {}),
         }
         for line in quote.lines
     ]
+    has_errors = bool(errors or line_errors or delivery_errors)
     return templates.TemplateResponse(
         request,
         "quotes/detail.html",
@@ -190,15 +210,37 @@ def _detail(
             "total": quotes.quote_total(quote),
             "pending": quotes.pending_count(quote),
             "notice": AI_NOTICES.get(AiOutcome(quote.ai_outcome)),
-            "options": [
-                {"value": quotes.item_key(item), "label": item.label}
-                for item in list_quotable_items(session)
-            ],
+            "options": [{"value": quotes.item_key(item), "label": item.label} for item in items],
             "form": form or {"item": "", "quantity": "1"},
             "errors": errors or {},
+            "delivery_form": delivery_form or _delivery_form(quote),
+            "delivery_errors": delivery_errors or {},
         },
-        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT if errors else status.HTTP_200_OK,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT if has_errors else status.HTTP_200_OK,
     )
+
+
+def _line_form(line: QuoteLine) -> dict[str, str]:
+    """Lo que muestra el formulario de una línea antes de editarla."""
+    item = ""
+    if line.review_reason is None and line.product_id is not None:
+        item = str(line.product_id)
+        if line.variant_id is not None:
+            item += f":{line.variant_id}"
+    return {"item": item, "quantity": "" if line.quantity is None else str(line.quantity)}
+
+
+def _delivery_form(quote: Quote) -> dict[str, str]:
+    return {
+        "date": quote.delivery_date.isoformat() if quote.delivery_date else "",
+        "time": quote.delivery_time.strftime("%H:%M") if quote.delivery_time else "",
+        "mode": quote.delivery_mode or "",
+        "address": quote.delivery_address or "",
+    }
+
+
+def _field_errors(error: ValidationError, messages: dict[str, str]) -> dict[str, str]:
+    return {str(detail["loc"][0]): messages[str(detail["loc"][0])] for detail in error.errors()}
 
 
 @router.post(
@@ -223,9 +265,7 @@ def add_line(
     try:
         quotes.add_line(session, quote_id, LineInput.model_validate(form))
     except ValidationError as error:
-        fields = {str(detail["loc"][0]) for detail in error.errors()}
-        errors = {field: LINE_ERRORS[field] for field in fields}
-        return _detail(request, session, quote, form=form, errors=errors)
+        return _detail(request, session, quote, form=form, errors=_field_errors(error, LINE_ERRORS))
     except quotes.ItemNotQuotableError:
         errors = {"item": LINE_ERRORS["item"]}
         return _detail(request, session, quote, form=form, errors=errors)
@@ -244,9 +284,41 @@ def add_line(
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Línea inválida"},
     },
 )
-def update_line(quote_id: int, line_id: int) -> Response:
-    """Corrige una línea y redirige al detalle."""
-    raise NotImplementedError
+def update_line(  # noqa: PLR0913, PLR0917  (la ruta y los dos campos del formulario)
+    request: Request,
+    session: SessionDep,
+    quote_id: int,
+    line_id: int,
+    item: Annotated[str, Form()] = "",
+    quantity: Annotated[str, Form()] = "",
+) -> Response:
+    """Corrige el ítem o la cantidad de una línea y redirige al detalle."""
+    quote = _get_quote_or_404(session, quote_id)
+    form = {"item": item, "quantity": quantity}
+    try:
+        quotes.update_line(session, quote_id, line_id, LineInput.model_validate(form))
+    except quotes.QuoteLineNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, LINE_NOT_FOUND_MESSAGE) from error
+    except ValidationError as error:
+        errors = _field_errors(error, LINE_ERRORS)
+        return _line_error(request, session, quote, line_id, form, errors)
+    except quotes.ItemNotQuotableError:
+        return _line_error(request, session, quote, line_id, form, {"item": LINE_ERRORS["item"]})
+    return _to_detail(request, quote_id)
+
+
+def _line_error(  # noqa: PLR0913, PLR0917  (la línea, lo escrito y sus errores)
+    request: Request,
+    session: Session,
+    quote: Quote,
+    line_id: int,
+    form: dict[str, str],
+    errors: dict[str, str],
+) -> HTMLResponse:
+    session.refresh(quote)  # la línea no cambió: se muestra como está guardada
+    return _detail(
+        request, session, quote, line_forms={line_id: form}, line_errors={line_id: errors}
+    )
 
 
 @router.post(
@@ -255,9 +327,14 @@ def update_line(quote_id: int, line_id: int) -> Response:
     status_code=status.HTTP_303_SEE_OTHER,
     responses={status.HTTP_404_NOT_FOUND: {"description": "La cotización o la línea no existen"}},
 )
-def remove_line(quote_id: int, line_id: int) -> Response:
+def remove_line(request: Request, session: SessionDep, quote_id: int, line_id: int) -> Response:
     """Elimina una línea y redirige al detalle."""
-    raise NotImplementedError
+    _get_quote_or_404(session, quote_id)
+    try:
+        quotes.remove_line(session, quote_id, line_id)
+    except quotes.QuoteLineNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, LINE_NOT_FOUND_MESSAGE) from error
+    return _to_detail(request, quote_id)
 
 
 @router.post(
@@ -269,6 +346,29 @@ def remove_line(quote_id: int, line_id: int) -> Response:
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Entrega inválida"},
     },
 )
-def update_delivery(quote_id: int) -> Response:
-    """Guarda la entrega y redirige al detalle."""
-    raise NotImplementedError
+def update_delivery(  # noqa: PLR0913, PLR0917  (los cuatro campos del formulario)
+    request: Request,
+    session: SessionDep,
+    quote_id: int,
+    date: Annotated[str, Form()] = "",
+    time: Annotated[str, Form()] = "",
+    mode: Annotated[str, Form()] = "",
+    address: Annotated[str, Form()] = "",
+) -> Response:
+    """Guarda la entrega y redirige al detalle; quita las marcas «por confirmar»."""
+    quote = _get_quote_or_404(session, quote_id)
+    form = {"date": date, "time": time, "mode": mode, "address": address}
+    try:
+        data = DeliveryInput.model_validate(form)
+    except ValidationError as error:
+        errors = _field_errors(error, DELIVERY_ERRORS)
+        return _detail(request, session, quote, delivery_form=form, delivery_errors=errors)
+    quotes.update_delivery(session, quote_id, data)
+    return _to_detail(request, quote_id)
+
+
+def _to_detail(request: Request, quote_id: int) -> RedirectResponse:
+    return RedirectResponse(
+        request.app.url_path_for("quote_detail", quote_id=quote_id),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )

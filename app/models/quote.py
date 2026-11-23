@@ -5,11 +5,13 @@ total no se guardan, se calculan al leer (research.md R9). Ningún precio sale d
 """
 
 import datetime
+import re
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, StringConstraints, field_validator
 from pydantic import Field as InputField
+from pydantic_core import PydanticCustomError
 from sqlalchemy import CheckConstraint, Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -20,6 +22,9 @@ ADDRESS_MAX_LENGTH = 200
 MAX_QUANTITY = 999
 # «<product_id>» o «<product_id>:<variant_id>». [0-9] y no \d, que acepta dígitos no latinos.
 _ITEM_PATTERN = r"^[0-9]+(:[0-9]+)?$"
+# Lo que envían <input type="date"> y <input type="time">: formatos fijos, sin interpretaciones.
+_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_TIME_PATTERN = re.compile(r"[0-9]{2}:[0-9]{2}")
 
 
 class QuoteStatus(StrEnum):
@@ -158,12 +163,78 @@ class LineInput(BaseModel):
 
 
 class DeliveryInput(BaseModel):
-    """Entrega que corrige el dueño: textos del formulario, vacíos si no hay dato.
+    """Entrega que corrige el dueño, tal como llega del formulario: textos, vacíos si no hay dato.
 
-    Esqueleto de la Historia 4: todavía no valida.
+    Valida el formato; `parsed_date`, `parsed_time`, `parsed_mode` y `parsed_address` dan los
+    valores para guardar.
     """
 
     date: str = ""
     time: str = ""
     mode: str = ""
     address: str = ""
+
+    @field_validator("date", "time", "mode", "address")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("date")
+    @classmethod
+    def _valid_date(cls, value: str) -> str:
+        if value and not (_DATE_PATTERN.fullmatch(value) and _is_iso_date(value)):
+            raise PydanticCustomError("date_invalid", "fecha inválida")
+        return value
+
+    @field_validator("time")
+    @classmethod
+    def _valid_time(cls, value: str) -> str:
+        if value and not (_TIME_PATTERN.fullmatch(value) and _is_iso_time(value)):
+            raise PydanticCustomError("time_invalid", "hora inválida")
+        return value
+
+    @field_validator("mode")
+    @classmethod
+    def _valid_mode(cls, value: str) -> str:
+        if value and value not in {mode.value for mode in DeliveryMode}:
+            raise PydanticCustomError("mode_invalid", "modalidad desconocida")
+        return value
+
+    @field_validator("address")
+    @classmethod
+    def _valid_address(cls, value: str) -> str:
+        if len(value) > ADDRESS_MAX_LENGTH:
+            raise PydanticCustomError("address_too_long", "dirección demasiado larga")
+        return value
+
+    @property
+    def parsed_date(self) -> datetime.date | None:
+        return datetime.date.fromisoformat(self.date) if self.date else None
+
+    @property
+    def parsed_time(self) -> datetime.time | None:
+        return datetime.time.fromisoformat(self.time) if self.time else None
+
+    @property
+    def parsed_mode(self) -> DeliveryMode | None:
+        return DeliveryMode(self.mode) if self.mode else None
+
+    @property
+    def parsed_address(self) -> str | None:
+        return self.address or None
+
+
+def _is_iso_date(value: str) -> bool:
+    try:
+        datetime.date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _is_iso_time(value: str) -> bool:
+    try:
+        datetime.time.fromisoformat(value)
+    except ValueError:
+        return False
+    return True

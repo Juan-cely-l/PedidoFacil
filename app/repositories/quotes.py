@@ -24,6 +24,12 @@ def list_quotes(session: Session) -> list[Quote]:
     return list(session.exec(statement).all())
 
 
+def delete_line(session: Session, line: QuoteLine) -> None:
+    """Borra una línea en su propia transacción."""
+    session.delete(line)
+    session.commit()
+
+
 def save_line(session: Session, line: QuoteLine) -> QuoteLine:
     """Guarda una línea en su propia transacción y la devuelve con su id."""
     session.add(line)

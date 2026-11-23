@@ -947,8 +947,10 @@ def test_quitar_una_linea_la_borra_y_baja_el_total(
 def test_quitar_las_lineas_por_revisar_deja_la_cotizacion_completa(
     session: Session, ref: ReferenceCatalog, draft: Quote
 ) -> None:
-    for position in (2, 3):
-        quotes.remove_line(session, _quote_id(draft), _line_id(draft, position))
+    # Los ids se leen antes de borrar: al quitar una línea, la lista se corre.
+    ids = [_line_id(draft, 2), _line_id(draft, 3)]
+    for line_id in ids:
+        quotes.remove_line(session, _quote_id(draft), line_id)
 
     assert quotes.pending_count(_reread(session, draft)) == 0
 

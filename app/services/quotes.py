@@ -298,9 +298,7 @@ def pending_count(quote: Quote) -> int:
 def add_line(session: Session, quote_id: int, data: LineInput) -> QuoteLine:
     """Agrega a mano una línea lista, con la etiqueta y el precio vigentes del catálogo."""
     quote = get_quote(session, quote_id)
-    item = next((i for i in list_quotable_items(session) if item_key(i) == data.item), None)
-    if item is None:
-        raise ItemNotQuotableError
+    item = _quotable(session, data.item)
     line = QuoteLine(
         quote_id=quote_id,
         position=max((line.position for line in quote.lines), default=0) + 1,
@@ -316,21 +314,63 @@ def add_line(session: Session, quote_id: int, data: LineInput) -> QuoteLine:
 
 def item_key(item: QuotableItem) -> str:
     """Referencia de un ítem en `LineInput.item`: «producto» o «producto:variante»."""
-    if item.variant_id is None:
-        return str(item.product_id)
-    return f"{item.product_id}:{item.variant_id}"
+    return (
+        f"{item.product_id}" if item.variant_id is None else f"{item.product_id}:{item.variant_id}"
+    )
 
 
 def update_line(session: Session, quote_id: int, line_id: int, data: LineInput) -> QuoteLine:
-    """Cambia el ítem o la cantidad de una línea; el precio sale del catálogo."""
-    raise NotImplementedError
+    """Cambia el ítem o la cantidad de una línea; el precio sale del catálogo (R9).
+
+    Con el mismo ítem, solo cambia la cantidad y la línea conserva su precio (FR-015), aunque el
+    catálogo haya cambiado o el ítem ya no se venda. Con otro ítem, o al resolver una línea
+    «Por revisar», copia la etiqueta y el precio vigentes. Guardar confirma la cantidad.
+    """
+    line = _line_of(get_quote(session, quote_id), line_id)
+    same_item = line.status == LineStatus.LISTA and data.item == _line_key(line)
+    if not same_item:
+        item = _quotable(session, data.item)
+        line.status = LineStatus.LISTA
+        line.review_reason = None
+        line.product_id, line.variant_id = item.product_id, item.variant_id
+        line.label, line.unit_price = item.label, item.unit_price
+    line.quantity = data.quantity
+    line.quantity_assumed = False
+    return repository.save_line(session, line)
 
 
 def remove_line(session: Session, quote_id: int, line_id: int) -> None:
-    """Quita una línea de la cotización."""
-    raise NotImplementedError
+    """Quita una línea de la cotización. Las demás conservan su posición."""
+    repository.delete_line(session, _line_of(get_quote(session, quote_id), line_id))
 
 
 def update_delivery(session: Session, quote_id: int, data: DeliveryInput) -> Quote:
-    """Guarda la entrega que corrigió el dueño y quita las marcas «por confirmar»."""
-    raise NotImplementedError
+    """Guarda la entrega que corrigió el dueño y quita las tres marcas «por confirmar»."""
+    quote = get_quote(session, quote_id)
+    quote.delivery_date, quote.delivery_time = data.parsed_date, data.parsed_time
+    quote.delivery_mode, quote.delivery_address = data.parsed_mode, data.parsed_address
+    quote.delivery_date_needs_review = False
+    quote.delivery_time_needs_review = False
+    quote.delivery_mode_needs_review = False
+    return repository.save_quote(session, quote)
+
+
+def _line_of(quote: Quote, line_id: int) -> QuoteLine:
+    line = next((line for line in quote.lines if line.id == line_id), None)
+    if line is None:
+        raise QuoteLineNotFoundError
+    return line
+
+
+def _quotable(session: Session, key: str) -> QuotableItem:
+    item = next((i for i in list_quotable_items(session) if item_key(i) == key), None)
+    if item is None:
+        raise ItemNotQuotableError
+    return item
+
+
+def _line_key(line: QuoteLine) -> str:
+    """La referencia del ítem de una línea lista, que siempre tiene producto (CHECK de la tabla)."""
+    if line.variant_id is None:
+        return f"{line.product_id}"
+    return f"{line.product_id}:{line.variant_id}"

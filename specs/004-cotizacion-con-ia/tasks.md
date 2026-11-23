@@ -323,9 +323,9 @@ Después, commit `test(PED-16): pruebas de corregir el borrador`.
 
 ### Implementación de la Historia 4 (verde)
 
-- [ ] T047 [US4] `DeliveryInput` en `app/models/quote.py`; `update_line`, `remove_line` y `update_delivery` en `app/services/quotes.py`, cada una en su propia transacción, con el precio siempre de `list_quotable_items` (research R9).
-- [ ] T048 [P] [US4] Las tres rutas en `app/routers/quotes.py`, con PRG y los mensajes de validación de contracts/quote-pages.md; formularios de edición, eliminación y entrega en `app/templates/quotes/detail.html`.
-- [ ] T049 [US4] Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): corregir el borrador antes de enviarlo`.
+- [x] T047 [US4] `DeliveryInput` en `app/models/quote.py`; `update_line`, `remove_line` y `update_delivery` en `app/services/quotes.py`, cada una en su propia transacción, con el precio siempre de `list_quotable_items` (research R9).
+- [x] T048 [P] [US4] Las tres rutas en `app/routers/quotes.py`, con PRG y los mensajes de validación de contracts/quote-pages.md; formularios de edición, eliminación y entrega en `app/templates/quotes/detail.html`.
+- [x] T049 [US4] Ejecutar `uv run pytest`, `uv run ruff check .` y `uv run mypy`; con todo en verde, commit `feat(PED-16): corregir el borrador antes de enviarlo`.
 
 ---
 
