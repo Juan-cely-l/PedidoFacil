@@ -19,6 +19,10 @@ _OAUTH_CALLBACK_PATH = "/auth/google/callback"
 _POSTGRES_SCHEMES = ("postgresql", "postgres")
 _MIN_SECRET_KEY_LENGTH = 32
 _LOCAL_HINT = "Para desarrollo local copia .env.example a .env (ENVIRONMENT=local)"
+# Valor de GEMINI_FALLBACK_MODEL que desactiva el respaldo (vacía cuenta como ausente).
+_NO_FALLBACK = "ninguno"
+# Principio V: respaldo manual si la IA tarda más de 15 s; nunca se configura un tope mayor.
+_MAX_AI_TIMEOUT_SECONDS = 15
 
 
 class Settings(BaseSettings):
@@ -43,6 +47,13 @@ class Settings(BaseSettings):
     secret_key: SecretStr | None = None
     ai_provider: Literal["fake", "gemini"] | None = None
     gemini_api_key: SecretStr | None = None
+    # Cotización con IA (PED-16): los modelos se cambian según la medición (research.md R2).
+    gemini_model: str = "gemini-3.5-flash-lite"
+    # Sin respaldo por defecto: la medición descartó gemini-3.8-flash y gemini-3.5-flash no cabe
+    # en el tiempo de espera (research.md R2). Un entorno nuevo no debe usar en silencio un
+    # modelo descartado.
+    gemini_fallback_model: str | None = None
+    ai_timeout_seconds: float = Field(default=10, gt=0, le=_MAX_AI_TIMEOUT_SECONDS)
     # Login del dueño con Google OAuth 2.0 / OpenID Connect (ADR 0003).
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
@@ -62,9 +73,38 @@ class Settings(BaseSettings):
             return frozenset(email for email in emails if email)
         return value
 
+    @field_validator("gemini_model")
+    @classmethod
+    def _require_model_name(cls, value: str) -> str:
+        """El modelo principal no puede quedar en blanco."""
+        name = value.strip()
+        if not name:
+            raise ValueError("GEMINI_MODEL: no puede quedar en blanco")
+        return name
+
+    @field_validator("gemini_fallback_model")
+    @classmethod
+    def _parse_fallback_model(cls, value: str | None) -> str | None:
+        """«ninguno» desactiva el respaldo; en blanco no es un nombre de modelo."""
+        if value is None:
+            return None
+        name = value.strip()
+        if name.lower() == _NO_FALLBACK:
+            return None
+        if not name:
+            raise ValueError(
+                f"GEMINI_FALLBACK_MODEL: no puede quedar en blanco ({_NO_FALLBACK!r} lo desactiva)"
+            )
+        return name
+
     @model_validator(mode="after")
     def _apply_environment_rules(self) -> Self:
         """Completa los valores por ambiente y, en producción, exige las variables obligatorias."""
+        if self.gemini_fallback_model == self.gemini_model:
+            raise ValueError(
+                "GEMINI_FALLBACK_MODEL: debe ser distinto de GEMINI_MODEL "
+                f"(usa {_NO_FALLBACK!r} para desactivar el respaldo)"
+            )
         if self.log_level is None:
             self.log_level = "DEBUG" if self.environment == "local" else "INFO"
         if self.public_base_url is None:

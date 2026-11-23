@@ -15,20 +15,27 @@ _CONNECT_TIMEOUT_SECONDS = 5
 
 
 def build_engine(url: str) -> Engine:
-    """Crea el motor de base de datos para la URL dada, sin abrir conexiones."""
+    """Crea el motor de base de datos para la URL dada, sin abrir conexiones.
+
+    `hide_parameters`: los errores de SQL no repiten los parámetros, que traen el mensaje y la
+    dirección del cliente (FR-018).
+    """
     if url.startswith("sqlite"):
         # TestClient atiende las peticiones en otro hilo; SQLite debe permitirlo.
         sqlite_args = {"check_same_thread": False}
         if make_url(url).database in (None, "", ":memory:"):
             # Una sola conexión compartida: si no, cada conexión vería una base vacía distinta.
-            return create_engine(url, connect_args=sqlite_args, poolclass=StaticPool)
-        return create_engine(url, connect_args=sqlite_args)
+            return create_engine(
+                url, connect_args=sqlite_args, poolclass=StaticPool, hide_parameters=True
+            )
+        return create_engine(url, connect_args=sqlite_args, hide_parameters=True)
 
     return create_engine(
         _with_psycopg_driver(url),
         connect_args={"connect_timeout": _CONNECT_TIMEOUT_SECONDS},
         # Neon cierra las conexiones al suspenderse: se verifican antes de usarlas.
         pool_pre_ping=True,
+        hide_parameters=True,
     )
 
 

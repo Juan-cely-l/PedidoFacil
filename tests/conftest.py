@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from pydantic_ai import models as ai_models
 from sqlmodel import Session, SQLModel
 
 import app.models  # noqa: F401  (registra las tablas en SQLModel.metadata)
@@ -24,6 +25,10 @@ from app.services.identity import get_identity_provider
 from tests.doubles import FakeIdentityProvider, log_in
 
 os.environ["ENVIRONMENT"] = "test"
+
+# Constitución, principio II: ninguna prueba llama a un modelo real. Con esto, cualquier intento
+# lanza RuntimeError antes de tocar la red; los modelos se sustituyen con FunctionModel.
+ai_models.ALLOW_MODEL_REQUESTS = False
 
 
 @pytest.fixture(autouse=True)

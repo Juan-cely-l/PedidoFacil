@@ -471,3 +471,101 @@ def test_la_uri_de_vuelta_de_google_sale_de_public_base_url(
         "https://pedidofacil-6nky.onrender.com/auth/google/callback"
     )
     assert local.oauth_redirect_uri == "http://testserver/auth/google/callback"
+
+
+# PED-16: modelo de Gemini y tiempo de espera de la IA (contracts/configuration.md)
+
+
+def test_el_modelo_el_respaldo_y_el_tiempo_de_espera_tienen_valores_por_defecto() -> None:
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.gemini_model == "gemini-3.5-flash-lite"
+    # Sin respaldo por defecto: la medición descartó gemini-3.8-flash (research R2).
+    assert settings.gemini_fallback_model is None
+    assert settings.ai_timeout_seconds == 10
+
+
+@pytest.mark.parametrize("value", ["ninguno", " Ninguno "])
+def test_el_respaldo_se_desactiva_con_ninguno(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", value)
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.gemini_fallback_model is None
+
+
+def test_un_respaldo_vacio_cuenta_como_ausente(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Convención del proyecto (env_ignore_empty): una variable vacía toma el valor por defecto.
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "")
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.gemini_fallback_model is None  # el valor por defecto: sin respaldo
+
+
+def test_el_respaldo_no_puede_ser_el_mismo_modelo(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
+
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, environment="test")
+
+    assert "GEMINI_FALLBACK_MODEL" in str(error.value)
+
+
+def test_el_modelo_no_puede_quedar_en_blanco(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Vacío cuenta como ausente (valor por defecto); solo espacios sí llega a la validación.
+    monkeypatch.setenv("GEMINI_MODEL", "   ")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, environment="test")
+
+
+@pytest.mark.parametrize("environment", ["local", "test"])
+@pytest.mark.parametrize("timeout", ["0", "-1", "15.01"])
+def test_el_tiempo_de_espera_fuera_de_rango_impide_arrancar(
+    monkeypatch: pytest.MonkeyPatch, environment: Literal["local", "test"], timeout: str
+) -> None:
+    # Principio V: respaldo manual si la IA tarda más de 15 s; nunca se configura un tope mayor.
+    monkeypatch.setenv("AI_TIMEOUT_SECONDS", timeout)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, environment=environment)
+
+
+def test_en_produccion_un_tiempo_de_espera_mayor_que_15_impide_arrancar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_production_env(monkeypatch, AI_TIMEOUT_SECONDS="15.01")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+@pytest.mark.parametrize(("timeout", "expected"), [("15", 15.0), ("0.5", 0.5)])
+def test_el_tiempo_de_espera_dentro_del_tope_se_acepta(
+    monkeypatch: pytest.MonkeyPatch, timeout: str, expected: float
+) -> None:
+    monkeypatch.setenv("AI_TIMEOUT_SECONDS", timeout)
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.ai_timeout_seconds == expected
+
+
+# Cobertura de ramas ya existentes de app/config.py (T010): no es comportamiento nuevo.
+
+
+def test_un_respaldo_none_explicito_queda_sin_respaldo() -> None:
+    settings = Settings(_env_file=None, environment="test", gemini_fallback_model=None)
+
+    assert settings.gemini_fallback_model is None
+
+
+def test_un_respaldo_en_blanco_impide_arrancar(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_FALLBACK_MODEL", "   ")
+
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, environment="test")
+
+    assert "GEMINI_FALLBACK_MODEL" in str(error.value)

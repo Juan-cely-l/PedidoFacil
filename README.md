@@ -64,6 +64,16 @@ Sin las variables de Google, la app arranca igual en local, pero «Entrar con Go
 
 **Las pruebas no necesitan credenciales.** Usan un proveedor de identidad simulado y un Google falso en memoria, y nunca llaman a Google ni leen el `.env`.
 
+### Cotización con IA en local
+
+En local, `AI_PROVIDER=fake` es el valor por defecto: la app no llama a Gemini y cada cotización
+queda como borrador manual, con el aviso «La IA está desactivada en este ambiente». Así se puede
+recorrer toda la historia sin clave. Para probar con Gemini, y para el recorrido completo, ver
+[specs/004-cotizacion-con-ia/quickstart.md](specs/004-cotizacion-con-ia/quickstart.md).
+
+La IA nunca fija precios: identifica productos, variantes y cantidades, y el código toma los
+precios del catálogo y calcula el total. Las pruebas nunca llaman a Gemini.
+
 ### Health checks
 
 | Ruta | Consulta la base | Respuesta | Lo usa |
@@ -98,5 +108,5 @@ Ver [docs/despliegue.md](docs/despliegue.md). Los logs y el rollback se completa
 
 ## Componentes reutilizados y uso de IA
 
-- Dependencias de terceros: ver `pyproject.toml` (FastAPI, Pydantic Settings, SQLModel, psycopg, Authlib e itsdangerous para el login con Google, y herramientas de desarrollo: ruff, mypy, pytest, time-machine, pre-commit). Cada una conserva su licencia.
+- Dependencias de terceros: ver `pyproject.toml` (FastAPI, Pydantic Settings, SQLModel, psycopg, Authlib e itsdangerous para el login con Google, pydantic-ai-slim con el proveedor de Google para la cotización con IA, y herramientas de desarrollo: ruff, mypy, pytest, time-machine, pre-commit). Cada una conserva su licencia.
 - Uso de IA en el desarrollo: la estructura inicial del repositorio y la configuración de calidad se generaron con ayuda de un asistente de IA (Claude) y fueron revisadas y adaptadas antes de integrarse.

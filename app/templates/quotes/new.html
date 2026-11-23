@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Nueva cotización · PedidoFácil{% endblock %}
+{% block content %}
+<h1>Nueva cotización</h1>
+{% if has_items %}
+{# El botón se desactiva al enviar: evita un doble envío mientras se espera a la IA (R13). #}
+<form method="post" action="/cotizaciones"
+      onsubmit="const b = this.querySelector('button'); b.disabled = true; b.textContent = 'Cotizando…';">
+  <label for="message">
+    Mensaje del cliente
+    <textarea id="message" name="message" rows="8" maxlength="2000" required
+              {% if error %}aria-invalid="true" aria-describedby="message-error"{% endif %}>{{ message }}</textarea>
+    {% if error %}<small id="message-error">{{ error }}</small>{% endif %}
+  </label>
+  <button type="submit">Cotizar</button>
+</form>
+{% else %}
+<p>Primero crea productos en el catálogo. <a href="/productos/nuevo">Crear un producto</a></p>
+{% endif %}
+{% endblock %}
