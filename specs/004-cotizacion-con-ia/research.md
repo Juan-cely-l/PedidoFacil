@@ -78,13 +78,86 @@ que admite cada modelo. Envía `MINIMAL` a `gemini-3.5-flash-lite` y `gemini-3.5
 
 - La corrida empezó hacia las 09:45 (hora de Colombia) y el autor la interrumpió con Ctrl+C tras 3
   de 51 peticiones (última fila, 09:46:34). Se reanuda después de las 09:51, así que **la ventana
-  real de la franja fue más amplia de lo previsto**: incluye esa pausa. La hora de cierre se anota
-  con el resultado.
+  real de la franja fue más amplia de lo previsto**: incluye esa pausa. Se reanudó hacia las 09:56
+  y cerró a las 10:05:47, con las 51 peticiones: la franja ocupó de 09:45 a 10:06.
 - Las 3 filas se conservan y no se repiten, aunque una sea un 503 y otra tardara 28,8 s. De esas 3
   no hay detalle de líneas, porque el archivo de líneas se agregó después.
 - **Lo que no se ajusta tras ver datos es la regla de decisión; la logística sí, y queda
   registrado aquí.** El arreglo solo cambia el script: no las instrucciones, el banco,
   `build_lines`, la regla de R14 ni lo que se envía a Gemini.
+
+### Nota para el informe: hoy se mide disponibilidad, no calidad de extracción
+
+Escrita el 2026-11-22 a las 10:22, a partir de los parciales de las 09:59. Para entonces la franja
+ya había terminado (10:05:47), aunque los totales todavía no se habían leído.
+
+- **Los parciales muestran congestión del proveedor.** A las 09:59, con 17 de 51 peticiones:
+  `gemini-3.5-flash` llevaba 5 de 6 intentos en 503; `gemini-3.8-flash`, ninguna respuesta válida
+  en 5 (3 con 503 y 2 sin responder en 30 s); `gemini-3.5-flash-lite`, 5 válidas de 6.
+- **Lo que se mide en esas condiciones es disponibilidad.** Un modelo que no responde no deja
+  extracciones que comparar, así que el acierto de los tres no es comparable entre sí.
+- **La conclusión que esos datos permiten** es «bajo congestión, el único modelo utilizable fue
+  flash-lite», **no** «flash-lite entiende mejor».
+- El acierto del modelo elegido sigue validando SC-008 sobre sus respuestas válidas (punto 7 del
+  protocolo), pero no dice nada de los otros dos.
+- Entre las 09:57 y las 10:00 corrieron las pruebas en el mismo equipo. Su efecto esperable es de
+  milisegundos, frente a latencias de segundos.
+
+### Hallazgos de la franja de la mañana del 2026-11-22
+
+Registrados antes de la franja de la tarde. **No cambian las instrucciones, el banco ni la regla.**
+
+- **A01 devolvió 4 donde se esperaban 2** («me mandas 2 pares en dorado»), con producto y variante
+  correctos.
+  - **Causa probable**: la regla «un par es 2» de las instrucciones. Es correcta para «un par de
+    brownies», pero no para un producto que se vende por pares. No está comprobada.
+  - **Lo importante no es el error, sino que no se ve**: la línea queda «Lista», sin marca, y
+    cobra el doble ($72.000 en vez de $36.000) sin que nada avise al dueño.
+- **Decisión pendiente, para después de la segunda franja**: si las cantidades interpretadas desde
+  una expresión («un par», «media docena», «unas veinte») deben marcarse para confirmar, como ya se
+  marcan las cantidades ausentes. Hay que tener en cuenta dos cosas al decidir:
+  - A01 no usa ninguna de esas tres expresiones: es una cifra con una unidad que agrupa («2
+    pares»). La regla tendría que cubrir también ese caso.
+  - Hoy la IA no dice si la cantidad salió de una expresión. Para saberlo, o el código analiza el
+    `customer_text`, o el esquema gana un campo, y esto último cambia lo que se envía a Gemini y
+    obliga a volver a medir.
+- **El 88,9 % de acierto de flash-lite se calculó sobre 12 de los 17 casos**: 16 correctos de 17
+  esperados, más 1 sobrante. Los otros cinco no obtuvieron respuesta (R02, R08, R10, A06 y A07,
+  todos con 503). Entre los ausentes están **dos de los tres mensajes fuera del catálogo** (R08 y
+  A07) y **el del precio en el mensaje** (R10). Lo único que se midió de lo que no está en el
+  catálogo es A05, que acertó.
+- **El 70,6 % de respuestas válidas en 10 s** significa que, bajo la congestión de esta mañana,
+  **cerca de un tercio de las cotizaciones (5 de 17) habría ido al camino manual** en producción.
+  El respaldo no las habría salvado: en esos cinco mensajes, `gemini-3.8-flash` tampoco respondió
+  (503 o 30 s sin respuesta).
+- **R09** (el mensaje que no es un pedido): flash-lite devolvió cero líneas, sin inventar nada. Es
+  una sola muestra.
+- **Cuota**: la última petición a `gemini-3.8-flash` dio 429, aunque iba a menos de 5 por minuto.
+  Encaja con un tope diario cercano a 20 peticiones, sin comprobar.
+
+### Enmienda del 2026-11-23: la cuota diaria es un criterio de descarte
+
+- **Decisión del autor**: un modelo cuyo tope gratuito diario no alcanza para el uso real **queda
+  descartado** para este proyecto, aunque su latencia sea buena. Es un criterio de selección, no
+  una incidencia de la medición. Va **antes** de la regla del punto 6: entre los modelos que lo
+  pasan, la regla elige sin cambios.
+- **Cuándo se escribió**: a las 06:30 del 23, antes de leer cualquier fila del 23 y con la franja
+  de la mañana ya en curso. El 429 de `gemini-3.8-flash` del 22 sí se había visto. Por eso queda
+  como enmienda fechada y no como parte de la regla original.
+- **No se supone el volumen de una repostería.** No lo tenemos, y las entrevistas no lo
+  indagaron. En vez de suponerlo, el criterio se formula al revés, como un límite:
+
+  > Con la cuota gratuita de **N = ____** peticiones diarias de `gemini-3.5-flash-lite` y hasta 2
+  > peticiones por cotización (la consulta más un reintento de validación), PedidoFácil soporta un
+  > máximo de **N/2 cotizaciones al día**.
+
+  N queda en blanco hasta que el autor lo lea en AI Studio. **El dato de demanda se pedirá a la
+  dueña en la validación de PED-70**, para comparar su volumen con ese límite.
+- **El respaldo no necesita cumplir el mismo tope**: solo se activa cuando falla el principal.
+- **HU-20 sí cambia el cálculo.** Con el bot, cada mensaje de cualquier cliente consume una
+  petición, también los que no son pedidos, y el volumen deja de estar bajo el control del dueño.
+  Es una razón más para la validación previa que ya está probada: los mensajes vacíos, demasiado
+  largos o sin catálogo no llegan a la IA (`model.calls == 0`).
 
 ### Cómo se vuelve a medir (antes del merge y cada vez que se dude)
 
@@ -132,6 +205,43 @@ variantes y cantidades correctos).
    se registra el resultado y se avisa al autor antes del merge.
 8. **Registro de la elección**: queda en este archivo, como R2 «resultado de la medición», con la
    fecha, la latencia y el acierto de cada modelo.
+
+### Resultado de la medición (2026-11-23)
+
+Con la regla del punto 6 **sin ajustar**, sobre la franja de la mañana del 23 (51 peticiones,
+06:21 a 06:36, hora de Colombia):
+
+| Modelo | Válidas | Válidas en ≤ 10 s | p50 | p95 | Errores | Acierto R14 |
+|---|--:|--:|--:|--:|---|--:|
+| `gemini-3.5-flash-lite` | 15/17 | **88,2 %** | 1.512 ms | 9.287 ms | 2 × 503 | **91,3 %** (21 de 22 + 1 sobrante) |
+| `gemini-3.5-flash` | 5/17 | 11,8 % | 10.191 ms | 16.289 ms | 3 × 503, 9 timeouts | 100 % (8 de 8) |
+| `gemini-3.8-flash` | 0/17 | 0 % | — | — | 7 × 503, 1 × 429, 9 timeouts | sin datos |
+
+- **Modelo elegido**: `gemini-3.5-flash-lite`, que ya es el valor de `GEMINI_MODEL`. **SC-008 se
+  cumple**: 91,3 % ≥ 80 %, sobre 15 de los 17 casos.
+- **Casos sin respuesta de flash-lite**: R01 y R08 (503). **R08 no tuvo respuesta ninguno de los
+  dos días**, así que de los tres mensajes fuera del catálogo se midieron A05 y A07.
+- **Único fallo de acierto, igual los dos días**: A01 devolvió 4 en vez de 2 (ver los hallazgos
+  del 22). El fallo se reproduce: no es ruido.
+- **R09** (el mensaje que no es un pedido): flash-lite devolvió cero líneas los dos días.
+- **Salvedad de protocolo**: el punto 6 cuenta **dos franjas del mismo día**, y el 23 solo se
+  midió la de la mañana. La elección se hace con una franja por decisión del autor, para cerrar
+  la historia hoy. No es robusta en el peor caso: si `gemini-3.5-flash` acertara las 17 en la
+  tarde, sumaría 19 de 34 (55,9 %), por encima del mínimo posible de flash-lite, 15 de 34
+  (44,1 %). La mañana del 22 no cuenta para la regla, pero se conserva y se reporta: documenta un
+  episodio real de congestión.
+- **Acierto sumando las dos mañanas** (solo como referencia): flash-lite, 37 de 41 (90,2 %).
+
+**Hallazgo 1: `gemini-3.8-flash` es inutilizable en la capa gratuita.** Tuvo 0 respuestas válidas
+en 34 intentos repartidos en dos días, y el 429 apareció en su petición número 17 los dos días,
+lo que indica un tope diario cercano a esa cifra. **Queda descartado por cuota, no por latencia**
+(enmienda del 23). Como era el único modelo de otra familia, **no queda ningún respaldo que cumpla
+la regla**: lo coherente es `GEMINI_FALLBACK_MODEL=ninguno` en Render.
+
+**Hallazgo 2: la congestión persiste dos días consecutivos.** No fue un episodio aislado del 19 de
+noviembre. Para el producto, **el camino manual no es una red de seguridad para un caso raro, sino
+parte del funcionamiento normal** en las condiciones observadas: del 12 % (23) al 29 % (22) de las
+cotizaciones con flash-lite habrían terminado en el borrador manual.
 
 ## R3. Tiempo de espera: 10 s, un único reloj sobre toda la consulta
 

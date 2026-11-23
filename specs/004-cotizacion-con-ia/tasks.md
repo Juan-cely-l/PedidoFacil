@@ -346,10 +346,10 @@ el código.
   - Al final, imprime por modelo: porcentaje de respuestas válidas en 10 s o menos, p50, p95 y acierto global sobre las respuestas válidas (sumando correctos, esperados y sobrantes de todo el banco, research R14), además de la procedencia: cuántos casos E01, E02 e inventados.
   - Lee la clave de `GEMINI_API_KEY` del entorno y se niega a correr sin ella. No tiene pruebas automáticas: lo que mide ya está probado, y el script es manual (research R2).
   - Commit `chore(PED-16): script de medición de modelos con el banco de mensajes`.
-- [ ] T051 Correr la franja de la mañana (hora de Colombia): `uv run --no-sync python -m scripts.medir_gemini --franja manana`. **Lo ejecuta el autor** con su clave.
+- [x] T051 Correr la franja de la mañana (hora de Colombia): `uv run --no-sync python -m scripts.medir_gemini --franja manana`. **Lo ejecuta el autor** con su clave.
 - [ ] T052 Correr la franja de la tarde del **mismo día**: `… --franja tarde`. **Lo ejecuta el autor**.
-- [ ] T053 Aplicar la regla de elección de research R2 sin cambiarla: registrar en research.md R2 «resultado de la medición» la fecha, la latencia (válidas en ≤ 10 s, p50, p95) y el acierto de cada modelo, el modelo elegido y el respaldo. Si el elegido no es `gemini-3.5-flash-lite`, anotar que se cambia `GEMINI_MODEL` (y `GEMINI_FALLBACK_MODEL` si aplica) en Render. Commit `docs(PED-16): resultado de la medición de modelos`, con `mediciones.csv`.
-- [ ] T054 **⛔ ALTO si el acierto del modelo elegido es menor que 80 % (SC-008)**: no se ajustan ni la regla ni el banco; se avisa al autor antes del merge con los números.
+- [x] T053 Aplicar la regla de elección de research R2 sin cambiarla: registrar en research.md R2 «resultado de la medición» la fecha, la latencia (válidas en ≤ 10 s, p50, p95) y el acierto de cada modelo, el modelo elegido y el respaldo. Si el elegido no es `gemini-3.5-flash-lite`, anotar que se cambia `GEMINI_MODEL` (y `GEMINI_FALLBACK_MODEL` si aplica) en Render. Commit `docs(PED-16): resultado de la medición de modelos`, con `mediciones.csv`.
+- [x] T054 **⛔ ALTO si el acierto del modelo elegido es menor que 80 % (SC-008)**: no se ajustan ni la regla ni el banco; se avisa al autor antes del merge con los números.
 
 ---
 
