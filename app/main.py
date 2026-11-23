@@ -6,11 +6,13 @@ from typing import Literal, cast
 
 from fastapi import Depends, FastAPI
 from pydantic import SecretStr
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 
 from app import APP_NAME, __version__
 from app.config import Settings, get_settings
 from app.db import build_engine
+from app.errors import handle_database_error
 from app.routers import auth, catalog, health, quotes
 from app.security import (
     SESSION_COOKIE,
@@ -68,6 +70,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dependencies=[Depends(require_owner)],
     )
     application.add_exception_handler(LoginRequired, redirect_to_login)
+    # Solo SQLAlchemy, nunca Exception: un error de programación no se disfraza de error de la base.
+    application.add_exception_handler(SQLAlchemyError, handle_database_error)
     # Fuente única de configuración y motor para dependencias y routers.
     application.state.settings = settings
     # Único punto donde se lee la URL: Settings garantiza que existe tras validarse.

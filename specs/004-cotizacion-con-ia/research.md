@@ -377,6 +377,13 @@ variantes y cantidades correctos).
   mensaje de un error de validación puede repetir la entrada. Es el mismo criterio de PED-15.
 - **Errores de la base**: el motor usa `hide_parameters=True`, para que una excepción de SQL no
   repita el mensaje ni la dirección. Es una defensa adicional: no oculta el `DETAIL` de PostgreSQL.
+- **Manejador de `SQLAlchemyError` para toda la app**: responde un 500 con un aviso y registra
+  `error=<tipo> origen=<tipo del driver> ruta=<método y ruta>`, por ejemplo
+  `error=IntegrityError origen=psycopg.errors.CheckViolation ruta=POST /cotizaciones`. Nunca
+  `str(exc)` ni la traza, que repiten el `DETAIL` con la fila entera.
+  - **No atrapa `Exception`**: un error de programación sigue siendo un error.
+  - **Es igual en todos los ambientes**, también en local: si cambiara, el camino de producción
+    sería el que nadie prueba.
 
 ## R12. `AI_PROVIDER=fake` en local
 
