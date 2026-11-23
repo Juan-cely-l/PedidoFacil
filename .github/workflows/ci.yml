@@ -52,7 +52,12 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
+      # Informativo, no bloqueante (decisión de PED-99) hasta que la línea base esté limpia. Este
+      # paso vive en el job checks, que es verificación obligatoria: sin continue-on-error, una
+      # avería de SonarCloud detenía la integración de un PR. El paso sigue apareciendo como
+      # fallido en la interfaz, así que el problema queda visible sin impedir el trabajo.
       - name: Análisis de calidad (SonarQube Cloud)
+        continue-on-error: true
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
