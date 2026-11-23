@@ -8,6 +8,18 @@
         href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.1.1/css/pico.min.css"
         integrity="sha384-L1dWfspMTHU/ApYnFiMz2QID/PlP1xCW9visvBdbEkOLkSSWsP6ZJWhPw6apiXxU"
         crossorigin="anonymous">
+  <style>
+    /* A 360 px la barra no cabe en una línea: pasa a dos en vez de desbordar la página. */
+    body > header nav, body > header nav ul { flex-wrap: wrap; }
+    /* En pantallas angostas, las tablas marcadas se leen como una lista apilada. */
+    @media (max-width: 575px) {
+      table.apilable thead { display: none; }
+      table.apilable, table.apilable tbody, table.apilable tfoot,
+      table.apilable tr, table.apilable td, table.apilable th { display: block; width: 100%; }
+      table.apilable tr { margin-bottom: var(--pico-spacing); }
+      table.apilable td[data-label]::before { content: attr(data-label) ": "; font-weight: bold; }
+    }
+  </style>
 </head>
 <body>
   <header class="container">

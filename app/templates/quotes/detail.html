@@ -16,7 +16,7 @@
 <h2>Productos</h2>
 {% if lines %}
 <div class="overflow-auto">
-  <table>
+  <table class="apilable">
     <thead>
       <tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th><th>Acciones</th></tr>
     </thead>
@@ -29,20 +29,20 @@
           {% if row.product_name %}<br><strong>{{ row.product_name }}</strong>{% endif %}
           {% if row.line.customer_text %}<br><q>{{ row.line.customer_text }}</q>{% endif %}
         </td>
-        <td>{{ row.line.quantity or "—" }}</td>
-        <td>—</td>
-        <td>—</td>
+        <td data-label="Cantidad">{{ row.line.quantity or "—" }}</td>
+        <td data-label="Precio unitario">—</td>
+        <td data-label="Subtotal">—</td>
         {% else %}
         <td>
           {{ row.line.label }}
           {% if row.line.customer_text %}<br><small><q>{{ row.line.customer_text }}</q></small>{% endif %}
         </td>
-        <td>
+        <td data-label="Cantidad">
           {{ row.line.quantity }}
           {% if row.line.quantity_assumed %}<br><small>Cantidad supuesta: confírmala</small>{% endif %}
         </td>
-        <td>{{ row.line.unit_price | cop }}</td>
-        <td>{{ row.subtotal | cop }}</td>
+        <td data-label="Precio unitario">{{ row.line.unit_price | cop }}</td>
+        <td data-label="Subtotal">{{ row.subtotal | cop }}</td>
         {% endif %}
         <td>
           <details{% if row.errors %} open{% endif %}>
