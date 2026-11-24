@@ -30,7 +30,7 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
 
 ## Fase 2: Catálogo (≈ 25 min)
 
-- [ ] T005 [P] Pruebas en `tests/unit/test_telegram_replies.py`: formatear el catálogo (etiqueta y
+- [x] T005 [P] Pruebas en `tests/unit/test_telegram_replies.py`: formatear el catálogo (etiqueta y
   precio de cada ítem, en orden; mensaje de catálogo vacío); partir en mensajes de como máximo 4096
   caracteres sin cortar una línea. En `tests/integration/test_telegram_webhook.py`: `/catalogo` y
   `/start` responden al chat que escribió, sin llamar a la IA.

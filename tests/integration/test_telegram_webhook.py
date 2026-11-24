@@ -4,6 +4,7 @@ La Bot API se simula con `httpx2.MockTransport` y la IA con un `FunctionModel`: 
 llama a Telegram ni a Gemini (constitución, principio II).
 """
 
+import json
 from collections.abc import Iterator
 
 import httpx2
@@ -11,12 +12,19 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from sqlmodel import Session, SQLModel
 
 from app.config import Settings
 from app.routers.quotes import get_quote_extractor
 from app.routers.telegram import SECRET_HEADER, WEBHOOK_PATH, get_telegram_bot
 from app.services.telegram import TelegramBot
-from tests.doubles import EMPTY_EXTRACTION, ScriptedModel, extraction_model, quote_agent
+from tests.doubles import (
+    EMPTY_EXTRACTION,
+    ScriptedModel,
+    extraction_model,
+    quote_agent,
+    seed_reference_catalog,
+)
 
 SECRET = "secreto-de-prueba"  # noqa: S105  (valor falso de prueba)
 TOKEN = "123456:token-de-prueba"  # noqa: S105  (valor falso de prueba)
@@ -59,6 +67,7 @@ def _app(settings: Settings, bot_api: BotApi, model: ScriptedModel) -> FastAPI:
     from app.main import create_app  # noqa: PLC0415  (app.main crea la app al importarse)
 
     application = create_app(settings)
+    SQLModel.metadata.create_all(application.state.engine)
     bot = TelegramBot(TOKEN, transport=httpx2.MockTransport(bot_api.handle))
     application.dependency_overrides[get_telegram_bot] = lambda: bot
     agent = quote_agent(model)
@@ -137,4 +146,69 @@ def test_una_actualizacion_sin_texto_responde_200_sin_llamar_a_la_ia(
     )
 
     assert response.status_code == 200
+    assert model.calls == 0
+
+
+# Fase 2: comandos (escenarios 5 y 6). La IA no interviene.
+
+
+def _sent(bot_api: BotApi) -> list[dict[str, object]]:
+    """Los `sendMessage` que recibió la Bot API simulada, en orden."""
+    sent = []
+    for request in bot_api.requests:
+        assert request.url.path == f"/bot{TOKEN}/sendMessage"
+        sent.append(json.loads(request.content))
+    return sent
+
+
+def _post(client: TestClient, text: str) -> None:
+    response = client.post(
+        WEBHOOK_PATH,
+        json=_update(text=text),
+        headers={SECRET_HEADER: SECRET},
+        follow_redirects=False,
+    )
+    assert response.status_code == 200
+
+
+def test_catalogo_responde_al_chat_con_los_items_y_sus_precios(
+    telegram: TestClient, bot_api: BotApi, model: ScriptedModel
+) -> None:
+    app = telegram.app
+    assert isinstance(app, FastAPI)
+    with Session(app.state.engine) as session:
+        seed_reference_catalog(session)
+
+    _post(telegram, "/catalogo")
+
+    (message,) = _sent(bot_api)
+    assert message["chat_id"] == CUSTOMER_CHAT
+    text = str(message["text"])
+    assert "Torta de chocolate — Tamaño: Mediana" in text
+    assert "$ 45.000" in text
+    assert "Café" in text
+    assert "parse_mode" not in message  # texto plano (D6)
+    assert model.calls == 0
+
+
+def test_catalogo_vacio_responde_que_no_hay_productos(
+    telegram: TestClient, bot_api: BotApi, model: ScriptedModel
+) -> None:
+    _post(telegram, "/catalogo")
+
+    (message,) = _sent(bot_api)
+    assert message["text"] == "Todavía no hay productos disponibles."
+    assert model.calls == 0
+
+
+@pytest.mark.parametrize("command", ["/start", "/ayuda", "/loquesea"])
+def test_start_y_los_comandos_desconocidos_responden_el_saludo(
+    telegram: TestClient, bot_api: BotApi, model: ScriptedModel, command: str
+) -> None:
+    # Un comando desconocido no se manda a la IA: gastaría cuota en algo que no es un pedido.
+    _post(telegram, command)
+
+    (message,) = _sent(bot_api)
+    assert message["chat_id"] == CUSTOMER_CHAT
+    assert "/catalogo" in str(message["text"])
     assert model.calls == 0
