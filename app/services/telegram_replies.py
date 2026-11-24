@@ -4,6 +4,7 @@ Funciones puras: no tocan la base ni la red. Los precios salen del catálogo, nu
 """
 
 from app.models.catalog import QuotableItem
+from app.models.quote import Quote
 
 # Límite de caracteres de un mensaje de la Bot API.
 TELEGRAM_MAX_LENGTH = 4096
@@ -60,3 +61,13 @@ def split_messages(text: str, limit: int = TELEGRAM_MAX_LENGTH) -> list[str]:
     if current is not None:
         parts.append(current)
     return parts
+
+
+def quote_reply(quote: Quote, items: list[QuotableItem]) -> str:
+    """Lo que el bot le responde al cliente sobre su cotización. Esqueleto de la Fase 3."""
+    raise NotImplementedError
+
+
+def owner_notice(quote: Quote, base_url: str) -> str | None:
+    """El aviso al dueño, o `None` si la cotización no necesita su revisión. Esqueleto."""
+    raise NotImplementedError

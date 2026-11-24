@@ -42,7 +42,7 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
 
 ## Fase 3: Cotización, no reconocidos y fallas de la IA (≈ 75 min)
 
-- [ ] T007 [P] Pruebas en `tests/unit/test_telegram_replies.py` para el texto de la cotización a
+- [x] T007 [P] Pruebas en `tests/unit/test_telegram_replies.py` para el texto de la cotización a
   partir de un `Quote` guardado:
   - líneas listas con subtotal y total, sin las «Por revisar»;
   - cada motivo con su frase y el texto del cliente;
@@ -51,7 +51,7 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
   - cero líneas: cómo pedir;
   - `ai_outcome` distinto de `ok`: «el dueño lo revisará»;
   - sin ids, nombres de modelos ni detalles de errores.
-- [ ] T008 [P] Pruebas en `tests/integration/test_telegram_webhook.py`, de punta a punta:
+- [x] T008 [P] Pruebas en `tests/integration/test_telegram_webhook.py`, de punta a punta:
   - un mensaje con dos productos responde la cotización con los precios del catálogo y no avisa
     al dueño;
   - uno con un producto inexistente responde qué no encontró y el catálogo, y avisa al dueño con
@@ -61,7 +61,7 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
   - un mensaje de más de 2000 caracteres no llama a la IA;
   - si `sendMessage` falla, se registra solo el tipo y responde 200;
   - ningún log contiene el texto, el nombre ni el chat id del cliente.
-- [ ] T009 Esqueletos de `quote_reply` y `owner_notice` en `app/services/telegram_replies.py`.
+- [x] T009 Esqueletos de `quote_reply` y `owner_notice` en `app/services/telegram_replies.py`.
 
 **⛔ ALTO — revisión de la fase roja 3.** Commit `test(PED-93): pruebas de cotizar por Telegram`.
 
