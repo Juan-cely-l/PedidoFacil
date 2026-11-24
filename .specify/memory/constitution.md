@@ -1,5 +1,7 @@
 <!--
 Informe de impacto de sincronización (Sync Impact Report)
+- Cambio de versión: 1.3.0 → 1.3.1 (PATCH; enmienda del 2026-11-24): corrección de la fecha de
+  entrega final al jueves 2026-11-26 a las 5:00 p. m. Ningún principio cambia.
 - Cambio de versión: 1.2.0 → 1.3.0 (MINOR; enmienda del 2026-11-20)
 - Motivo: recorte de alcance. HU-18 (inventario y compras) y HU-19 (alertas de stock bajo)
   salieron del backlog del proyecto en la planificación del Sprint 2, el 2026-11-18 (ADR 0004).
@@ -39,7 +41,7 @@ cotización con los precios del catálogo, la envía por WhatsApp o Telegram y, 
 acepta, la convierte en pedido. Un bot de Telegram atiende únicamente a los clientes. La
 aplicación no lleva inventario ni registra compras. No existe página pública de seguimiento. Es un proyecto académico individual
 (Ingeniería de Software), gestionado con Scrum en Jira (proyecto PED), con entrega final el
-2026-11-29.
+jueves 2026-11-26 a las 5:00 p. m.
 
 ## Principios fundamentales
 
@@ -182,4 +184,4 @@ commit.
   DEBE justificarse en la sección de complejidad (Complexity Tracking) de `plan.md`.
 - La guía operativa para el agente de desarrollo está en `CLAUDE.md`.
 
-**Versión**: 1.3.0 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-20
+**Versión**: 1.3.1 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-24

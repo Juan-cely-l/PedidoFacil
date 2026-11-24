@@ -4,7 +4,7 @@ La constitución (`.specify/memory/constitution.md`) prevalece sobre este archiv
 
 ## Contexto
 - App que convierte el mensaje de un cliente en una cotización con los precios del catálogo, la envía por WhatsApp o Telegram y la convierte en pedido; incluye un bot de Telegram que atiende solo. Sin inventario ni compras (ADR 0004).
-- Proyecto académico individual, gestionado en Jira (proyecto `PED`). Entrega: 29 de noviembre de 2026.
+- Proyecto académico individual, gestionado en Jira (proyecto `PED`). Entrega: jueves 26 de noviembre de 2026 a las 5:00 p. m.
 - El autor viene de Spring Boot: al explicar código, relaciónalo con su equivalente en Spring cuando ayude (Depends ↔ inyección de dependencias, Pydantic ↔ DTO + Bean Validation, Alembic ↔ Flyway, TestClient ↔ MockMvc).
 
 ## Comandos

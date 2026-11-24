@@ -82,3 +82,8 @@ mensajes de error.
   crear credenciales fuera del repositorio y configurarlas en Render antes de desplegar. Si
   alguna falta o falla, bloquea su historia en producción.
 - Cambiar de proveedor de identidad requiere un nuevo ADR y una enmienda de la constitución.
+
+> **Nota del 24/11/2026.** Esta decisión se tomó creyendo que la entrega era
+> el 29 de noviembre. La fecha real es el 26. El plazo disponible al decidir
+> era por tanto de 8 días y no de 11. La decisión se mantiene; se deja
+> constancia de que la premisa temporal era incorrecta.
