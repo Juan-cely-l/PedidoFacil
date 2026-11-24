@@ -9,17 +9,17 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
 
 ## Fase 1: Configuración y webhook seguro (≈ 35 min)
 
-- [ ] T001 [P] Pruebas en `tests/unit/test_config.py`: `telegram_bot_token`,
+- [x] T001 [P] Pruebas en `tests/unit/test_config.py`: `telegram_bot_token`,
   `telegram_webhook_secret` (ambos `SecretStr | None`) y `owner_telegram_chat_id` (`int | None`)
   se leen de `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` y `OWNER_TELEGRAM_CHAT_ID`; vacíos
   cuentan como ausentes; producción arranca sin ellos; `telegram_enabled` es verdadero solo con
   token y secreto.
-- [ ] T002 [P] Pruebas en `tests/integration/test_telegram_webhook.py`:
+- [x] T002 [P] Pruebas en `tests/integration/test_telegram_webhook.py`:
   - sin la cabecera del secreto, o con otra, responde 401 y no llama a la Bot API;
   - con el bot sin configurar, responde 404;
   - con el secreto correcto y una actualización sin texto, responde 200 sin llamar a la IA;
   - la prueba de protección de rutas incluye `/telegram/webhook` entre las públicas.
-- [ ] T003 Esqueletos con `raise NotImplementedError`: el router y el cliente de la Bot API
+- [x] T003 Esqueletos con `raise NotImplementedError`: el router y el cliente de la Bot API
   (`app/services/telegram.py`, `send_message(chat_id, text)` sobre `httpx2.AsyncClient`, inyectable).
 
 **⛔ ALTO — revisión de la fase roja 1.** Commit `test(PED-93): pruebas del webhook seguro`.

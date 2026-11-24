@@ -569,3 +569,78 @@ def test_un_respaldo_en_blanco_impide_arrancar(monkeypatch: pytest.MonkeyPatch) 
         Settings(_env_file=None, environment="test")
 
     assert "GEMINI_FALLBACK_MODEL" in str(error.value)
+
+
+# PED-93: bot de Telegram (specs/005-bot-telegram/spec.md, D2)
+
+
+def test_el_bot_de_telegram_lee_sus_tres_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:token-falso")
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "secreto-falso")
+    monkeypatch.setenv("OWNER_TELEGRAM_CHAT_ID", "987654321")
+
+    settings = Settings(_env_file=None, environment="test")
+
+    token = settings.telegram_bot_token  # type: ignore[attr-defined]
+    secret = settings.telegram_webhook_secret  # type: ignore[attr-defined]
+    assert isinstance(token, SecretStr)
+    assert token.get_secret_value() == "123456:token-falso"
+    assert isinstance(secret, SecretStr)
+    assert secret.get_secret_value() == "secreto-falso"
+    assert settings.owner_telegram_chat_id == 987654321  # type: ignore[attr-defined]
+    assert settings.telegram_enabled is True  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("environment", ["test", "production"])
+def test_sin_variables_de_telegram_el_bot_queda_apagado_y_la_app_arranca(
+    request: pytest.FixtureRequest, environment: str
+) -> None:
+    settings: Settings = (
+        request.getfixturevalue("production_settings")
+        if environment == "production"
+        else Settings(_env_file=None, environment="test")
+    )
+
+    assert settings.telegram_bot_token is None  # type: ignore[attr-defined]
+    assert settings.telegram_webhook_secret is None  # type: ignore[attr-defined]
+    assert settings.owner_telegram_chat_id is None  # type: ignore[attr-defined]
+    assert settings.telegram_enabled is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    "variable", ["TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "OWNER_TELEGRAM_CHAT_ID"]
+)
+def test_una_variable_de_telegram_vacia_cuenta_como_ausente(
+    monkeypatch: pytest.MonkeyPatch, variable: str
+) -> None:
+    monkeypatch.setenv(variable, "")
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert getattr(settings, variable.lower()) is None
+
+
+@pytest.mark.parametrize(
+    ("token", "secret"), [("123456:token-falso", None), (None, "secreto-falso")]
+)
+def test_el_bot_solo_se_activa_con_token_y_secreto(
+    monkeypatch: pytest.MonkeyPatch, token: str | None, secret: str | None
+) -> None:
+    for name, value in (("TELEGRAM_BOT_TOKEN", token), ("TELEGRAM_WEBHOOK_SECRET", secret)):
+        if value is not None:
+            monkeypatch.setenv(name, value)
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.telegram_enabled is False  # type: ignore[attr-defined]
+
+
+def test_un_chat_del_dueno_que_no_es_un_numero_impide_arrancar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OWNER_TELEGRAM_CHAT_ID", "dueno")
+
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, environment="test")
+
+    assert "owner_telegram_chat_id" in str(error.value)

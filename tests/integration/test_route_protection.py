@@ -26,7 +26,15 @@ from app.services.identity import get_identity_provider
 from tests.doubles import FailingSession, FakeIdentityProvider
 
 # Duplicada a propósito: ampliar lo público exige tocar dos sitios.
-EXPECTED_PUBLIC = {"/health", "/health/live", "/login", "/login/google", "/auth/google/callback"}
+EXPECTED_PUBLIC = {
+    "/health",
+    "/health/live",
+    "/login",
+    "/login/google",
+    "/auth/google/callback",
+    # PED-93: Telegram no tiene sesión; lo protege su token secreto (constitución, principio VI).
+    "/telegram/webhook",
+}
 
 
 def _failing_session() -> Iterator[Session]:

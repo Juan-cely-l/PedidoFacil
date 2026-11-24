@@ -13,7 +13,7 @@ from app import APP_NAME, __version__
 from app.config import Settings, get_settings
 from app.db import build_engine
 from app.errors import handle_database_error
-from app.routers import auth, catalog, health, quotes
+from app.routers import auth, catalog, health, quotes, telegram
 from app.security import (
     SESSION_COOKIE,
     SESSION_MAX_AGE_SECONDS,
@@ -101,6 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(auth.router)
     application.include_router(catalog.router)
     application.include_router(quotes.router)
+    application.include_router(telegram.router)
 
     if settings.environment == "production" and settings.ai_provider == "fake":
         logger.warning(
