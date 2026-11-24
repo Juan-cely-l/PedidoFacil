@@ -19,7 +19,7 @@ habilita llevar datos personales a producción.
 
 Restricciones que condicionan la decisión:
 
-- **Tiempo**: quedan 8 días hasta la entrega (2026-11-26 a las 5:00 p. m.), para una sola persona.
+- **Tiempo**: quedan 11 días hasta la entrega (2026-11-29), para una sola persona.
 - **Costo cero**: ninguna opción puede exigir pagos ni trámites empresariales.
 - **Pruebas sin red** (constitución, principio II): el login debe poder simularse de forma
   determinista.
@@ -82,3 +82,8 @@ mensajes de error.
   crear credenciales fuera del repositorio y configurarlas en Render antes de desplegar. Si
   alguna falta o falla, bloquea su historia en producción.
 - Cambiar de proveedor de identidad requiere un nuevo ADR y una enmienda de la constitución.
+
+> **Nota del 24/11/2026.** Esta decisión se tomó creyendo que la entrega era
+> el 29 de noviembre. La fecha real es el 26. El plazo disponible al decidir
+> era por tanto de 8 días y no de 11. La decisión se mantiene; se deja
+> constancia de que la premisa temporal era incorrecta.

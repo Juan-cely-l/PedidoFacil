@@ -23,7 +23,7 @@ pedidos desde el primer mensaje del cliente:
 
 Restricciones que condicionan las decisiones:
 
-- **Tiempo**: quedan 15 días hasta la entrega (2026-11-26 a las 5:00 p. m.), para una sola persona.
+- **Tiempo**: quedan 18 días hasta la entrega (2026-11-29), para una sola persona.
 - **TDD y pruebas sin red** (constitución, principios I y II): cada integración externa debe
   poder simularse de forma determinista.
 - **Costo cero**: ninguna integración puede exigir pagos ni trámites empresariales.
@@ -96,3 +96,8 @@ obligatorias:
 - El envío por WhatsApp no es automático; el bot solo existe en Telegram.
 - La Bot API se modela a mano: si se usaran más funciones habría que ampliar ese código propio.
 - Cambiar cualquiera de estas piezas requiere un nuevo ADR y una enmienda de la constitución.
+
+> **Nota del 24/11/2026.** Esta decisión se tomó creyendo que la entrega era
+> el 29 de noviembre. La fecha real es el 26. El plazo disponible al decidir
+> era por tanto de 15 días y no de 18. La decisión se mantiene; se deja
+> constancia de que la premisa temporal era incorrecta.

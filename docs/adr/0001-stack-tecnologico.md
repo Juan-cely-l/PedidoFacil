@@ -12,7 +12,7 @@ estado con un enlace.
 
 Restricciones que condicionan la elección:
 
-- **Tiempo**: proyecto individual de 3 semanas (entrega el 2026-11-26 a las 5:00 p. m.).
+- **Tiempo**: proyecto individual de 3 semanas (entrega el 2026-11-29).
 - **Experiencia del autor**: sólida en Spring Boot y nula en frameworks web de Python. El stack
   debe tener conceptos equivalentes y una curva de aprendizaje corta.
 - **TDD y CI obligatorios** (constitución, principios I a III): cada pieza del stack debe poder
@@ -110,3 +110,9 @@ Se adopta el siguiente stack, que la constitución (principio IV) fija como obli
 - La dependencia de un plan gratuito de Gemini implica límites de cuota; el respaldo manual
   (principio V) garantiza que la aplicación siga siendo usable si la IA falla.
 - Cambiar cualquiera de estas piezas requiere un nuevo ADR y una enmienda de la constitución.
+
+> **Nota del 24/11/2026.** Esta decisión se tomó creyendo que la entrega era
+> el 29 de noviembre. La fecha real es el 26. El plazo disponible al decidir
+> era por tanto de unos 17 días (dos semanas y media) y no de 3 semanas.
+> La decisión se mantiene; se deja constancia de que la premisa temporal
+> era incorrecta.
