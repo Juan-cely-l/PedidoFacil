@@ -37,7 +37,7 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
 
 **⛔ ALTO — revisión de la fase roja 2.** Commit `test(PED-93): pruebas del catálogo por Telegram`.
 
-- [ ] T006 Verde: `app/services/telegram_replies.py` (funciones puras de texto) y el despacho de
+- [x] T006 Verde: `app/services/telegram_replies.py` (funciones puras de texto) y el despacho de
   comandos en el router. Commit `feat(PED-93): listar el catálogo por Telegram`.
 
 ## Fase 3: Cotización, no reconocidos y fallas de la IA (≈ 75 min)
