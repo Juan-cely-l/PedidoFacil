@@ -19,7 +19,7 @@ habilita llevar datos personales a producción.
 
 Restricciones que condicionan la decisión:
 
-- **Tiempo**: quedan 11 días hasta la entrega (2026-11-29), para una sola persona.
+- **Tiempo**: quedan 8 días hasta la entrega (2026-11-26 a las 5:00 p. m.), para una sola persona.
 - **Costo cero**: ninguna opción puede exigir pagos ni trámites empresariales.
 - **Pruebas sin red** (constitución, principio II): el login debe poder simularse de forma
   determinista.

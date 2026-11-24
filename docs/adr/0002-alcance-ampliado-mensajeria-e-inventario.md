@@ -23,7 +23,7 @@ pedidos desde el primer mensaje del cliente:
 
 Restricciones que condicionan las decisiones:
 
-- **Tiempo**: quedan 18 días hasta la entrega (2026-11-29), para una sola persona.
+- **Tiempo**: quedan 15 días hasta la entrega (2026-11-26 a las 5:00 p. m.), para una sola persona.
 - **TDD y pruebas sin red** (constitución, principios I y II): cada integración externa debe
   poder simularse de forma determinista.
 - **Costo cero**: ninguna integración puede exigir pagos ni trámites empresariales.

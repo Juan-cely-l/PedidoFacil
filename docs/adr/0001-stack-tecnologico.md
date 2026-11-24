@@ -12,7 +12,7 @@ estado con un enlace.
 
 Restricciones que condicionan la elección:
 
-- **Tiempo**: proyecto individual de 3 semanas (entrega el 2026-11-29).
+- **Tiempo**: proyecto individual de 3 semanas (entrega el 2026-11-26 a las 5:00 p. m.).
 - **Experiencia del autor**: sólida en Spring Boot y nula en frameworks web de Python. El stack
   debe tener conceptos equivalentes y una curva de aprendizaje corta.
 - **TDD y CI obligatorios** (constitución, principios I a III): cada pieza del stack debe poder
