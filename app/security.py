@@ -26,7 +26,15 @@ SESSION_COOKIE = "pedidofacil_session"
 
 # Única lista de rutas abiertas: los health checks (Render) y el propio login.
 PUBLIC_PATHS = frozenset(
-    {"/health", "/health/live", "/login", "/login/google", "/auth/google/callback"}
+    {
+        "/health",
+        "/health/live",
+        "/login",
+        "/login/google",
+        "/auth/google/callback",
+        # Telegram no tiene sesión: el webhook lo protege su token secreto (principio VI).
+        "/telegram/webhook",
+    }
 )
 
 

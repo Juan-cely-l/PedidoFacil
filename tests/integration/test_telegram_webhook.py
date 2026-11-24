@@ -75,7 +75,7 @@ def telegram(
         _env_file=None,
         environment="test",
         secret_key=test_settings.secret_key,
-        telegram_bot_token=SecretStr(TOKEN),  # type: ignore[call-arg]
+        telegram_bot_token=SecretStr(TOKEN),
         telegram_webhook_secret=SecretStr(SECRET),
         owner_telegram_chat_id=999,
     )

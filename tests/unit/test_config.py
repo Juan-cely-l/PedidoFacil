@@ -581,14 +581,14 @@ def test_el_bot_de_telegram_lee_sus_tres_variables(monkeypatch: pytest.MonkeyPat
 
     settings = Settings(_env_file=None, environment="test")
 
-    token = settings.telegram_bot_token  # type: ignore[attr-defined]
-    secret = settings.telegram_webhook_secret  # type: ignore[attr-defined]
+    token = settings.telegram_bot_token
+    secret = settings.telegram_webhook_secret
     assert isinstance(token, SecretStr)
     assert token.get_secret_value() == "123456:token-falso"
     assert isinstance(secret, SecretStr)
     assert secret.get_secret_value() == "secreto-falso"
-    assert settings.owner_telegram_chat_id == 987654321  # type: ignore[attr-defined]
-    assert settings.telegram_enabled is True  # type: ignore[attr-defined]
+    assert settings.owner_telegram_chat_id == 987654321
+    assert settings.telegram_enabled is True
 
 
 @pytest.mark.parametrize("environment", ["test", "production"])
@@ -601,10 +601,10 @@ def test_sin_variables_de_telegram_el_bot_queda_apagado_y_la_app_arranca(
         else Settings(_env_file=None, environment="test")
     )
 
-    assert settings.telegram_bot_token is None  # type: ignore[attr-defined]
-    assert settings.telegram_webhook_secret is None  # type: ignore[attr-defined]
-    assert settings.owner_telegram_chat_id is None  # type: ignore[attr-defined]
-    assert settings.telegram_enabled is False  # type: ignore[attr-defined]
+    assert settings.telegram_bot_token is None
+    assert settings.telegram_webhook_secret is None
+    assert settings.owner_telegram_chat_id is None
+    assert settings.telegram_enabled is False
 
 
 @pytest.mark.parametrize(
@@ -632,7 +632,7 @@ def test_el_bot_solo_se_activa_con_token_y_secreto(
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.telegram_enabled is False  # type: ignore[attr-defined]
+    assert settings.telegram_enabled is False
 
 
 def test_un_chat_del_dueno_que_no_es_un_numero_impide_arrancar(

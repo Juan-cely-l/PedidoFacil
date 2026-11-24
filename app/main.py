@@ -23,6 +23,7 @@ from app.security import (
 )
 from app.services.identity import GoogleIdentityProvider
 from app.services.quote_ai import build_quote_agent
+from app.services.telegram import TelegramBot
 
 LOGGER_NAME = "pedidofacil"
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -86,6 +87,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model_name=settings.gemini_model,
         fallback_model_name=settings.gemini_fallback_model,
         timeout_seconds=settings.ai_timeout_seconds,
+    )
+    # Bot de Telegram (PED-93): None si falta el token o el secreto del webhook.
+    application.state.telegram_bot = (
+        TelegramBot(settings.telegram_bot_token.get_secret_value())
+        if settings.telegram_enabled and settings.telegram_bot_token is not None
+        else None
     )
     # Sesión del dueño en una cookie firmada con SECRET_KEY (research.md R5). Starlette la marca
     # siempre HttpOnly; Secure solo en producción, donde la app se sirve por https.

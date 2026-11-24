@@ -24,7 +24,7 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
 
 **⛔ ALTO — revisión de la fase roja 1.** Commit `test(PED-93): pruebas del webhook seguro`.
 
-- [ ] T004 Verde: los campos en `app/config.py` y `.env.example` (comentarios); el router en
+- [x] T004 Verde: los campos en `app/config.py` y `.env.example` (comentarios); el router en
   `app/routers/telegram.py` con `hmac.compare_digest`, `BackgroundTasks` y la dependencia del
   cliente; `PUBLIC_PATHS`. Commit `feat(PED-93): webhook de Telegram con token secreto`.
 

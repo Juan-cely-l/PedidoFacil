@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     owner_emails: Annotated[frozenset[str], NoDecode] = frozenset()
     # URL pública de la app; la URI de vuelta de Google sale de aquí.
     public_base_url: str | None = None
+    # Bot de Telegram (PED-93, HU-20). Opcionales: sin token o secreto, el bot queda apagado.
+    telegram_bot_token: SecretStr | None = None
+    telegram_webhook_secret: SecretStr | None = None
+    owner_telegram_chat_id: int | None = None
     # Render publica la URL del servicio: se usa si PUBLIC_BASE_URL no está definida.
     render_external_url: str | None = Field(default=None, validation_alias="RENDER_EXTERNAL_URL")
 
@@ -130,6 +134,11 @@ class Settings(BaseSettings):
         if self.public_base_url is None:
             self.public_base_url = _DEFAULT_PUBLIC_BASE_URLS[self.environment]
         return self
+
+    @property
+    def telegram_enabled(self) -> bool:
+        """El bot atiende solo con el token y el secreto del webhook."""
+        return self.telegram_bot_token is not None and self.telegram_webhook_secret is not None
 
     @property
     def docs_enabled(self) -> bool:
