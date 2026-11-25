@@ -74,14 +74,14 @@ async def telegram_webhook(  # noqa: PLR0913, PLR0917  (dependencias de FastAPI)
     # El cuerpo se lee solo después de validar el secreto.
     message = _text_message(await request.json())
     if message is not None:
-        chat_id, text = message
+        chat_id, text, username = message
         reply = _Reply(bot, request.app.state.engine, settings, extractor)
-        background.add_task(reply.answer, chat_id, text)
+        background.add_task(reply.answer, chat_id, text, username)
     return Response(status_code=status.HTTP_200_OK)
 
 
-def _text_message(update: Any) -> tuple[int, str] | None:
-    """El chat y el texto de un mensaje nuevo; `None` para cualquier otra actualización."""
+def _text_message(update: Any) -> tuple[int, str, str | None] | None:
+    """El chat, el texto y el @usuario de un mensaje nuevo; `None` para otra actualización."""
     message = update.get("message") if isinstance(update, dict) else None
     if not isinstance(message, dict):
         return None
@@ -89,7 +89,11 @@ def _text_message(update: Any) -> tuple[int, str] | None:
     if not isinstance(text, str) or not isinstance(chat, dict):
         return None
     chat_id = chat.get("id")
-    return (chat_id, text) if isinstance(chat_id, int) else None
+    sender = message.get("from")
+    username = sender.get("username") if isinstance(sender, dict) else None
+    if not isinstance(chat_id, int):
+        return None
+    return chat_id, text, username if isinstance(username, str) else None
 
 
 class _Reply:
@@ -104,12 +108,12 @@ class _Reply:
     ) -> None:
         self.bot, self.engine, self.settings, self.extractor = bot, engine, settings, extractor
 
-    async def answer(self, chat_id: int, text: str) -> None:
-        """Responde un comando o cotiza el mensaje."""
+    async def answer(self, chat_id: int, text: str, username: str | None) -> None:
+        """Responde un comando o cotiza el mensaje. `username` solo va en el aviso al dueño."""
         if text.startswith("/"):
             await self._send(chat_id, self._command(text))
             return
-        reply, notice = await self._quote(text)
+        reply, notice = await self._quote(text, username)
         await self._send(chat_id, reply)
         owner_chat = self.settings.owner_telegram_chat_id
         if notice is not None and owner_chat is not None:
@@ -124,7 +128,7 @@ class _Reply:
         with Session(self.engine) as session:
             return catalog_text(list_quotable_items(session))
 
-    async def _quote(self, text: str) -> tuple[str, str | None]:
+    async def _quote(self, text: str, username: str | None) -> tuple[str, str | None]:
         """Cotiza con el servicio de HU-08, igual que la web; devuelve la respuesta y el aviso."""
         now = datetime.datetime.now(datetime.UTC)
         with Session(self.engine) as session:
@@ -142,7 +146,9 @@ class _Reply:
             except quotes.NothingToQuoteError:
                 return EMPTY_CATALOG_TEXT, None
             reply = quote_reply(quote, list_quotable_items(session))
-            notice = owner_notice(quote, self.settings.public_base_url or "")
+            notice = owner_notice(
+                quote, self.settings.public_base_url or "", customer_username=username
+            )
         return reply, notice
 
     async def _send(self, chat_id: int, text: str) -> None:

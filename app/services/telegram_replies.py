@@ -3,6 +3,8 @@
 Funciones puras: no tocan la base ni la red. Los precios salen del catálogo, nunca de la IA.
 """
 
+from itertools import groupby
+
 from app.models.catalog import QuotableItem
 from app.models.quote import AiOutcome, LineStatus, Quote, QuoteLine, ReviewReason
 from app.services.quotes import line_subtotal, quote_total
@@ -12,8 +14,13 @@ TELEGRAM_MAX_LENGTH = 4096
 
 EMPTY_CATALOG_TEXT = "Todavía no hay productos disponibles."
 TOO_LONG_TEXT = "Tu mensaje es demasiado largo; envíamelo más corto, por favor."
-REVIEW_TEXT = "Recibimos tu pedido; el dueño lo revisará y te escribirá."
-DONE_TEXT = "El dueño te confirmará el pedido."
+# Ciertos con lo que el sistema hace hoy: no tiene forma de avisarle al cliente (25/11).
+REVIEW_TEXT = "Recibimos tu mensaje; el dueño lo revisará."
+DONE_TEXT = (
+    "Esta cotización tiene los precios de hoy y todavía no es un pedido. "
+    "Para hacer tu pedido, escríbele al negocio."
+)
+SEPARATOR = "—" * 16
 NO_ORDER_TEXT = (
     "No encontré un pedido en tu mensaje. Escríbeme los productos y las cantidades, "
     "o escribe /catalogo para ver lo que tenemos."
@@ -26,18 +33,23 @@ def pesos(amount: int) -> str:
 
 
 def catalog_text(items: list[QuotableItem]) -> str:
-    """El catálogo: un ítem por línea, con su precio, en el orden de `list_quotable_items`."""
+    """El catálogo, un bloque por producto: el nombre solo, y debajo cada variante con su precio.
+
+    En el orden de `list_quotable_items`. Texto plano (D6): saltos de línea, sin tablas.
+    """
     if not items:
         return EMPTY_CATALOG_TEXT
-    lines = [f"• {item.label}: {pesos(item.unit_price)}" for item in items]
-    return "\n".join(
-        [
-            "Nuestro catálogo:",
-            *lines,
-            "",
-            "Escríbeme qué quieres y cuántos, y te envío la cotización.",
-        ]
-    )
+    blocks = ["Nuestro catálogo\n" + SEPARATOR]
+    for _, group in groupby(items, key=lambda item: item.product_id):
+        product_items = list(group)
+        lines = [product_items[0].label.partition(" — ")[0]]
+        for item in product_items:
+            variant = item.label.partition(" — ")[2]
+            price = pesos(item.unit_price)
+            lines.append(f"   • {variant} — {price}" if variant else f"   {price}")
+        blocks.append("\n".join(lines))
+    blocks.append("Escríbeme qué quieres y cuántos, y te envío la cotización.")
+    return "\n\n".join(blocks)
 
 
 def start_text() -> str:
@@ -83,22 +95,22 @@ def quote_reply(quote: Quote, items: list[QuotableItem]) -> str:
         return NO_ORDER_TEXT
     ready = [line for line in quote.lines if line.status == LineStatus.LISTA]
     pending = [line for line in quote.lines if line.status == LineStatus.POR_REVISAR]
-    parts: list[str] = []
+    # Bloques separados por una línea en blanco: líneas, total, pendientes y cierre.
+    blocks: list[str] = []
     if ready:
-        parts.append("Tu cotización:")
-        parts.extend(
-            f"• {line.label} (cantidad {line.quantity}): {pesos(line_subtotal(line) or 0)}"
-            for line in ready
-        )
-        parts.append(f"Total: {pesos(quote_total(quote))}")
+        lines = ["Tu cotización", SEPARATOR]
+        for line in ready:
+            subtotal = pesos(line_subtotal(line) or 0)
+            lines.append(f"• {line.label}")
+            lines.append(f"   {line.quantity} x {pesos(line.unit_price or 0)} = {subtotal}")
+        blocks.append("\n".join(lines))
+        blocks.append(f"Total: {pesos(quote_total(quote))}")
     if pending:
-        parts.extend(["", "No pude cotizar esto:"])
-        parts.extend(_pending_line(line, items) for line in pending)
-    if ready:
-        parts.extend(["", DONE_TEXT])
-    else:
-        parts.extend(["", catalog_text(items)])
-    return "\n".join(parts)
+        blocks.append(
+            "\n".join(["Por revisar:", *(_pending_line(line, items) for line in pending)])
+        )
+    blocks.append(DONE_TEXT if ready else catalog_text(items))
+    return "\n\n".join(blocks)
 
 
 def _pending_line(line: QuoteLine, items: list[QuotableItem]) -> str:
@@ -115,15 +127,22 @@ def _pending_line(line: QuoteLine, items: list[QuotableItem]) -> str:
     return f"{quoted}: no lo encontré."
 
 
-def owner_notice(quote: Quote, base_url: str) -> str | None:
-    """El aviso al dueño, o `None` si la cotización no necesita su revisión (D7)."""
+def owner_notice(quote: Quote, base_url: str, *, customer_username: str | None) -> str | None:
+    """El aviso al dueño, o `None` si la cotización no necesita su revisión (D7).
+
+    Lleva el @usuario del cliente para que el dueño le escriba desde su cuenta; si no tiene, lo
+    dice. Es un mensaje privado al dueño: ese dato nunca va a los logs (principio VI).
+    """
     link = f"{base_url}/cotizaciones/{quote.id}"
     if quote.ai_outcome != AiOutcome.OK:
-        return f"Cotización n.º {quote.id} por Telegram: la IA no pudo procesarla. Revísala: {link}"
-    pending = sum(1 for line in quote.lines if line.status == LineStatus.POR_REVISAR)
-    if pending:
-        return (
-            f"Cotización n.º {quote.id} por Telegram: {pending} línea(s) por revisar. "
-            f"Revísala: {link}"
-        )
-    return None
+        reason = "la IA no pudo procesarla"
+    elif pending := sum(1 for line in quote.lines if line.status == LineStatus.POR_REVISAR):
+        reason = f"{pending} línea(s) por revisar"
+    else:
+        return None
+    contact = (
+        f"Cliente: @{customer_username}"
+        if customer_username
+        else "El cliente no tiene usuario de Telegram."
+    )
+    return f"Cotización n.º {quote.id} por Telegram: {reason}.\n{contact}\nRevísala: {link}"

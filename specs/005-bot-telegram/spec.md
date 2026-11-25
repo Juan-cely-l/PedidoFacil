@@ -48,7 +48,8 @@ No se escribe ni se deja preparado:
 
 **Cotización**
 7. Un mensaje con productos reconocidos responde las líneas (etiqueta, cantidad y subtotal) y el
-   total, en pesos con separador de miles. Termina con «El dueño te confirmará el pedido».
+   total, en pesos con separador de miles. Termina con «Esta cotización tiene los precios de hoy y todavía no es un pedido. Para hacer tu pedido, escríbele al negocio.»
+   (texto cambiado el 25/11: el sistema no puede avisarle al cliente).
 8. Con alguna línea «Por revisar»:
    - las líneas reconocidas se cotizan igual, y el total solo las incluye;
    - para cada línea pendiente, el bot cita lo que escribió el cliente y dice por qué no la
@@ -59,7 +60,7 @@ No se escribe ni se deja preparado:
 9. Un mensaje que no es un pedido (cero líneas, como R09): el bot responde cómo pedir y menciona
    `/catalogo`. Sin aviso al dueño.
 10. Si la IA falla, tarda más del tiempo de espera o está desactivada (`ai_outcome` distinto de
-    `ok`): «Recibimos tu pedido; el dueño lo revisará y te escribirá». **El dueño recibe un aviso**
+    `ok`): «Recibimos tu mensaje; el dueño lo revisará.» (texto cambiado el 25/11). **El dueño recibe un aviso**
     con el número de la cotización y su enlace.
 11. Mensaje demasiado largo: el bot pide uno más corto y no llama a la IA.
 
@@ -91,7 +92,7 @@ No se escribe ni se deja preparado:
 | D4 | Responder 200 y procesar con `BackgroundTasks`. | Con la IA, la respuesta puede tardar hasta 10 s. Un error o una demora harían que Telegram reintentara la misma actualización y gastara cuota de Gemini otra vez. |
 | D5 | El catálogo muestra los precios. | Son los precios públicos del negocio, y salen de `list_quotable_items`. |
 | D6 | Texto plano, sin `parse_mode`. | Evita escapar Markdown o HTML del texto del cliente y no hay riesgo de formato inyectado. |
-| D7 | El aviso al dueño lleva el número de la cotización, el enlace `PUBLIC_BASE_URL/cotizaciones/{id}` y el motivo. | El dueño corrige en la web, que ya existe (HU-08). |
+| D7 | El aviso al dueño lleva el número de la cotización, el enlace `PUBLIC_BASE_URL/cotizaciones/{id}`, el motivo y el `@usuario` de Telegram del cliente, o la frase «El cliente no tiene usuario de Telegram» si no lo tiene (decisión del 25/11). | El dueño corrige en la web, que ya existe (HU-08), y puede escribirle al cliente desde su propia cuenta. El `@usuario` va solo en ese mensaje privado: nunca en los logs (principio VI). |
 
 ## Riesgos
 
@@ -101,3 +102,13 @@ No se escribe ni se deja preparado:
   validación previa del servicio (mensajes vacíos o largos no llegan a la IA) y el camino manual.
 - **Render Free se suspende**: el primer mensaje tras la inactividad puede tardar unos 50 s, y
   Telegram puede reintentarlo. Se acepta para la demostración.
+
+## Cambios del 25/11, tras usar el bot en producción
+
+- **Formato del catálogo**: cada producto en su bloque, con el nombre en su propia línea y las
+  variantes debajo, cada una con su precio. Texto plano (D6).
+- **Formato de la cotización**: las líneas cotizadas, el total y lo que quedó por revisar, en
+  bloques separados.
+- **Aviso al dueño**: lleva el `@usuario` del cliente (D7).
+- **Textos al cliente**: se retiran «El dueño te confirmará el pedido» y «te escribirá», porque el
+  sistema no tiene forma de avisarle al cliente.
