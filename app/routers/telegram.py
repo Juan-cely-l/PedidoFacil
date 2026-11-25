@@ -17,7 +17,7 @@ from sqlalchemy import Engine
 from sqlmodel import Session
 
 from app.config import Settings, get_app_settings
-from app.routers.quotes import QuoteExtractor, get_quote_extractor
+from app.dependencies import QuoteExtractor, get_quote_extractor
 from app.services import quotes
 from app.services.catalog import list_quotable_items
 from app.services.telegram import TelegramBot

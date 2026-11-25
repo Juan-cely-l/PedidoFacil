@@ -16,9 +16,9 @@ from pydantic import SecretStr
 from sqlmodel import Session, SQLModel, select
 
 from app.config import Settings
+from app.dependencies import get_quote_extractor
 from app.models.catalog import ProductInput
 from app.models.quote import Quote
-from app.routers.quotes import get_quote_extractor
 from app.routers.telegram import SECRET_HEADER, WEBHOOK_PATH, get_telegram_bot
 from app.services import catalog
 from app.services.telegram import TelegramBot
