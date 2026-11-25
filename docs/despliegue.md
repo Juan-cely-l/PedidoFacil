@@ -73,6 +73,9 @@ Variables de entorno:
 | `GOOGLE_CLIENT_ID` | ID del cliente OAuth de Google (sección 3) |
 | `GOOGLE_CLIENT_SECRET` | Secreto del mismo cliente OAuth |
 | `OWNER_EMAILS` | Correos autorizados a entrar, separados por comas (por ejemplo, el Gmail del dueño) |
+| `TELEGRAM_BOT_TOKEN` | Token del bot, de @BotFather (sección 4) |
+| `TELEGRAM_WEBHOOK_SECRET` | Secreto del webhook, generado por el dueño (sección 4) |
+| `OWNER_TELEGRAM_CHAT_ID` | Chat numérico del dueño, que recibe los avisos del bot (sección 4) |
 | `PUBLIC_BASE_URL` | `https://pedidofacil-6nky.onrender.com` (sin `/` al final; debe ser `https`) |
 
 Desde PED-15 (HU-07), la app **no arranca en producción** si falta alguna de las cuatro
@@ -125,14 +128,75 @@ que coincidir carácter por carácter con una de las registradas. Si no, Google 
 `redirect_uri_mismatch`.
 
 Qué queda público: `/health`, `/health/live` (Render los usa como health check), `/login`,
-`/login/google` y `/auth/google/callback`. Todo lo demás, incluido `/productos`, exige sesión y
+`/login/google`, `/auth/google/callback` y `/telegram/webhook`, que no tiene sesión y lo protege
+su secreto (sección 4). Todo lo demás, incluido `/productos`, exige sesión y
 sin ella redirige a `/login`. En producción no existen `/docs` ni `/openapi.json`.
 
 La sesión vive en una cookie firmada con `SECRET_KEY`, de tipo `HttpOnly`, `SameSite=lax` y
 `Secure`. Sobrevive a un reinicio o redeploy de la app y caduca 12 horas después del login, aunque
 se use sin parar. Para salir antes, está el botón «Cerrar sesión».
 
-### 4. Rotar `SECRET_KEY`
+### 4. Bot de Telegram
+
+El bot atiende a los clientes (HU-20): lista el catálogo con `/catalogo` y cotiza los mensajes con
+los precios del catálogo. Si la IA falla o algo no se reconoce, le avisa al dueño. Sin las dos
+primeras variables, el bot queda apagado, su webhook responde 404 y la app arranca igual.
+
+Variables en Render:
+
+| Variable | Qué es | De dónde sale |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | Credencial del bot ante la Bot API, con el formato `123456789:AA…` | [@BotFather](https://t.me/BotFather), comando `/newbot`. Un bot distinto para local y para producción |
+| `TELEGRAM_WEBHOOK_SECRET` | Lo que Telegram envía en la cabecera `X-Telegram-Bot-Api-Secret-Token` de cada actualización. Sin él, o con otro valor, el webhook responde 401 | Lo genera el dueño. Telegram admite de 1 a 256 caracteres, solo `A-Z`, `a-z`, `0-9`, `_` y `-`: `uv run python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| `OWNER_TELEGRAM_CHAT_ID` | Chat numérico del dueño, adonde llegan los avisos. Opcional: sin él, los avisos se omiten | El dueño le escribe cualquier cosa al bot y lee `message.chat.id` en `getUpdates`, **antes** de registrar el webhook (ver la advertencia de abajo) |
+
+**El secreto de Render y el que se envía a `setWebhook` deben ser idénticos.** Si no coinciden, el
+webhook responde 401 a todas las actualizaciones: el bot no contesta, el cliente no ve ningún
+error y la app no registra nada. La única pista es `last_error_message` en `getWebhookInfo`. Al
+cambiar el secreto, se cambia en los dos lugares.
+
+**Registrar el webhook**, desde una terminal, con los valores tomados del entorno y nunca escritos
+en la línea del comando (así no quedan en el historial):
+
+```bash
+read -rsp "TELEGRAM_BOT_TOKEN: " TELEGRAM_BOT_TOKEN; echo
+read -rsp "TELEGRAM_WEBHOOK_SECRET: " TELEGRAM_WEBHOOK_SECRET; echo
+export TELEGRAM_BOT_TOKEN TELEGRAM_WEBHOOK_SECRET
+PUBLIC_BASE_URL=https://pedidofacil-6nky.onrender.com
+
+curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+  --data-urlencode "url=${PUBLIC_BASE_URL}/telegram/webhook" \
+  --data-urlencode "secret_token=${TELEGRAM_WEBHOOK_SECRET}" \
+  --data-urlencode 'allowed_updates=["message"]'
+```
+
+Respuesta esperada: `{"ok":true,"result":true,"description":"Webhook was set"}`.
+`allowed_updates` limita las actualizaciones a mensajes nuevos, las únicas que el bot atiende.
+
+**Verificarlo** con `getWebhookInfo`:
+
+```bash
+curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo"
+unset TELEGRAM_BOT_TOKEN TELEGRAM_WEBHOOK_SECRET
+```
+
+Debe responder `"ok": true` con:
+
+- `url` igual a `https://pedidofacil-6nky.onrender.com/telegram/webhook`;
+- `allowed_updates` igual a `["message"]`;
+- `pending_update_count` en 0, o bajando;
+- **sin** `last_error_message`. Si aparece `Wrong response from the webhook: 401 Unauthorized`,
+  el secreto no coincide; si dice `404 Not Found`, falta `TELEGRAM_BOT_TOKEN` o
+  `TELEGRAM_WEBHOOK_SECRET` en Render.
+
+Después, escribirle `/start` al bot desde Telegram: debe responder el saludo.
+
+**Advertencia: con el webhook registrado, `getUpdates` deja de funcionar.** Telegram responde
+`409 Conflict: can't use getUpdates method while webhook is active`. Por eso el chat del dueño se
+lee antes. Para volver a usarlo, hay que borrar el webhook con `deleteWebhook`, y el bot deja de
+atender hasta registrarlo otra vez.
+
+### 5. Rotar `SECRET_KEY`
 
 Cambiar `SECRET_KEY` invalida la firma de todas las cookies de sesión:
 
@@ -149,7 +213,7 @@ petición.
 **Cómo:** Render → Environment → `SECRET_KEY` → **Generate** → guardar, y después **Manual Deploy**
 si Render no redespliega solo.
 
-### 5. Environment `production` (GitHub)
+### 6. Environment `production` (GitHub)
 
 En **Settings → Environments → production**:
 
@@ -157,7 +221,7 @@ En **Settings → Environments → production**:
 - **Secreto** `RENDER_DEPLOY_HOOK_URL`: la URL de **Render → Settings → Deploy Hook**.
 - **Variable** `PRODUCTION_URL`: la URL pública del servicio, sin `/` al final.
 
-### 6. Job de despliegue
+### 7. Job de despliegue
 
 El job `deploy` de `.github/workflows/ci.yml` solo corre en `push` a `main` y después de `checks`. Llama al Deploy Hook y consulta `/health` cada 15 segundos (hasta 10 minutos) hasta que el campo `commit` coincide con el commit integrado. Si no coincide a tiempo, el job falla en rojo.
 
@@ -201,4 +265,8 @@ Tras cualquiera de los dos, se verifica con `/health` que el commit reportado es
 | «Esta cuenta de Google no tiene acceso» | El correo no está en `OWNER_EMAILS` | Agregarlo a la variable y redesplegar |
 | «La IA no está disponible en este momento» o «no respondió a tiempo» | El proveedor está congestionado (503) o se agotó la cuota diaria (429) | Es el camino manual: agregar los productos a mano. El log `pedidofacil.quotes` dice el tipo de falla |
 | «Exited with status 1» tras integrar PED-16 | `AI_PROVIDER=gemini` sin `GEMINI_API_KEY`, o `AI_TIMEOUT_SECONDS` mayor que 15 | Definirla en Render → Environment |
+| El bot no contesta y `getWebhookInfo` dice `401 Unauthorized` | `TELEGRAM_WEBHOOK_SECRET` de Render y el `secret_token` de `setWebhook` no coinciden | Registrar el webhook otra vez con el mismo secreto (sección 4) |
+| El bot no contesta y `getWebhookInfo` dice `404 Not Found` | Falta `TELEGRAM_BOT_TOKEN` o `TELEGRAM_WEBHOOK_SECRET` en Render: el bot está apagado | Definirlas en Render → Environment y redesplegar |
+| `getUpdates` responde `409 Conflict` | El webhook está registrado | Es lo esperado. Para leer el chat del dueño, `deleteWebhook`, leerlo y registrar el webhook otra vez |
+| El dueño no recibe avisos del bot | Falta `OWNER_TELEGRAM_CHAT_ID`, o el dueño nunca le escribió al bot | Definir la variable; el dueño debe escribirle primero al bot, porque Telegram no deja que un bot inicie la conversación |
 | «No se completó el inicio de sesión con Google» al volver | Se rotó `SECRET_KEY` o se reinició el login en otra pestaña | Volver a pulsar «Entrar con Google» |

@@ -15,9 +15,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app.dependencies import get_quote_extractor
 from app.models.catalog import Product
 from app.models.quote import AiOutcome, LineStatus, Quote, QuoteLine, ReviewReason
-from app.routers.quotes import get_quote_extractor
 from tests.doubles import (
     EMPTY_EXTRACTION,
     ReferenceCatalog,

@@ -18,7 +18,7 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 
 from app.db import build_engine
-from app.routers.quotes import get_quote_extractor
+from app.dependencies import get_quote_extractor
 from tests.doubles import (
     EMPTY_EXTRACTION,
     ReferenceCatalog,

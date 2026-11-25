@@ -19,7 +19,7 @@ La constitución (`.specify/memory/constitution.md`) prevalece sobre este archiv
 - SQLModel + Alembic (nunca `create_all` fuera de las pruebas). SQLite en local y pruebas; PostgreSQL (Neon) en producción vía `DATABASE_URL`.
 - Interfaz: Jinja2 + HTMX + Pico.css. Sin frameworks de frontend.
 - IA: Pydantic AI con Gemini. En pruebas: `TestModel`/`FunctionModel` y `ALLOW_MODEL_REQUESTS=False`.
-- Telegram: Bot API con httpx y webhook en `app/routers/telegram.py`; en pruebas, `httpx.MockTransport`.
+- Telegram: Bot API con httpx2 y webhook en `app/routers/telegram.py`; en pruebas, `httpx2.MockTransport`.
 - Envío desde la web: enlaces `wa.me` y `t.me/share`, sin API de WhatsApp.
 - Montos: enteros en pesos (nunca float).
 - Login: Google OAuth 2.0 con authlib sobre SessionMiddleware; sin contraseñas. Solo entran los correos de OWNER_EMAILS. En pruebas se sustituye el cliente OAuth y nunca se llama a Google.

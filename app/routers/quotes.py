@@ -10,15 +10,14 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from pydantic import ValidationError
-from pydantic_ai import Agent
 from sqlmodel import Session
 
 from app.config import Settings, get_app_settings
 from app.db import get_session
+from app.dependencies import QuoteExtractor, get_quote_extractor
 from app.models.quote import AiOutcome, DeliveryInput, LineInput, Quote, QuoteLine, ReviewReason
 from app.services import quotes
 from app.services.catalog import list_quotable_items
-from app.services.quote_ai import QuoteExtraction
 from app.templating import COLOMBIA, templates
 
 QUOTE_NOT_FOUND_MESSAGE = "La cotización no existe"
@@ -51,15 +50,6 @@ REVIEW_REASON_LABELS = {
 }
 
 router = APIRouter(prefix="/cotizaciones", tags=["cotizaciones"])
-
-QuoteExtractor = Agent[None, QuoteExtraction]
-
-
-def get_quote_extractor(request: Request) -> QuoteExtractor | None:
-    """Dependencia: el agente construido al arrancar (`app.state`), o `None` sin IA."""
-    extractor: QuoteExtractor | None = request.app.state.quote_extractor
-    return extractor
-
 
 SessionDep = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_app_settings)]

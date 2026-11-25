@@ -1,5 +1,9 @@
 <!--
 Informe de impacto de sincronización (Sync Impact Report)
+- Cambio de versión: 1.3.1 → 1.3.2 (PATCH; enmienda del 2026-11-24): el cliente HTTP es
+  `httpx2`, no `httpx` (principios II y IV). Corrige un dato desactualizado desde PED-15:
+  `httpx2` es la dependencia declarada en pyproject.toml, y `httpx` solo llega de forma
+  transitiva (por fastapi[standard] y google-genai). No es una decisión nueva.
 - Cambio de versión: 1.3.0 → 1.3.1 (PATCH; enmienda del 2026-11-24): corrección de la fecha de
   entrega final al jueves 2026-11-26 a las 5:00 p. m. Ningún principio cambia.
 - Cambio de versión: 1.2.0 → 1.3.0 (MINOR; enmienda del 2026-11-20)
@@ -63,9 +67,9 @@ deja evidencia auditable del proceso, que es parte de la evaluación académica.
 - Ninguna prueba ni la CI DEBE hacer llamadas de red reales.
 - La IA se prueba con `TestModel` o `FunctionModel` de Pydantic AI, y
   `ALLOW_MODEL_REQUESTS=False` DEBE estar activado globalmente en las pruebas.
-- La Bot API de Telegram DEBE simularse con `httpx.MockTransport`.
+- La Bot API de Telegram DEBE simularse con `httpx2.MockTransport`.
 - Las pruebas NUNCA DEBEN llamar a Google: el cliente OAuth se sustituye con
-  `app.dependency_overrides` o `httpx.MockTransport`.
+  `app.dependency_overrides` o `httpx2.MockTransport`.
 - La base de datos de pruebas DEBE ser SQLite en memoria.
 - Cuando un comportamiento dependa del día actual, la fecha DEBE congelarse con
   `time-machine`.
@@ -93,7 +97,7 @@ proyecto individual no tiene.
 - SQLite en local y PostgreSQL (Neon) en producción, seleccionados vía `DATABASE_URL`.
 - Interfaz con Jinja2 + HTMX + Pico.css; sin frameworks de frontend.
 - Extracción con Pydantic AI y Gemini.
-- Integración con la Bot API de Telegram mediante llamadas directas con `httpx` y un webhook en
+- Integración con la Bot API de Telegram mediante llamadas directas con `httpx2` y un webhook en
   FastAPI; NO DEBEN usarse librerías de bots.
 - Envío de cotizaciones desde la web por WhatsApp y Telegram con enlaces `wa.me` y
   `t.me/share`; la API oficial de WhatsApp queda fuera del alcance.
@@ -184,4 +188,4 @@ commit.
   DEBE justificarse en la sección de complejidad (Complexity Tracking) de `plan.md`.
 - La guía operativa para el agente de desarrollo está en `CLAUDE.md`.
 
-**Versión**: 1.3.1 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-24
+**Versión**: 1.3.2 | **Ratificada**: 2026-11-11 | **Última enmienda**: 2026-11-24

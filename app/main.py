@@ -13,7 +13,7 @@ from app import APP_NAME, __version__
 from app.config import Settings, get_settings
 from app.db import build_engine
 from app.errors import handle_database_error
-from app.routers import auth, catalog, health, quotes
+from app.routers import auth, catalog, health, quotes, telegram
 from app.security import (
     SESSION_COOKIE,
     SESSION_MAX_AGE_SECONDS,
@@ -23,6 +23,7 @@ from app.security import (
 )
 from app.services.identity import GoogleIdentityProvider
 from app.services.quote_ai import build_quote_agent
+from app.services.telegram import TelegramBot
 
 LOGGER_NAME = "pedidofacil"
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -45,6 +46,11 @@ def _configure_logging(level: str) -> None:
         handler.setFormatter(logging.Formatter(_LOG_FORMAT))
         app_logger.addHandler(handler)
     app_logger.propagate = False
+    # Principio VI: httpx2 registra en INFO la URL completa de cada petición, y esa URL puede
+    # llevar credenciales: el token de la Bot API de Telegram va en la ruta. En WARNING para
+    # todo el proceso, aunque alguien baje el nivel del logger raíz. No quitar para depurar:
+    # reabre la fuga.
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -87,6 +93,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         fallback_model_name=settings.gemini_fallback_model,
         timeout_seconds=settings.ai_timeout_seconds,
     )
+    # Bot de Telegram (PED-93): None si falta el token o el secreto del webhook.
+    application.state.telegram_bot = (
+        TelegramBot(settings.telegram_bot_token.get_secret_value())
+        if settings.telegram_enabled and settings.telegram_bot_token is not None
+        else None
+    )
     # Sesión del dueño en una cookie firmada con SECRET_KEY (research.md R5). Starlette la marca
     # siempre HttpOnly; Secure solo en producción, donde la app se sirve por https.
     application.add_middleware(
@@ -101,6 +113,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(auth.router)
     application.include_router(catalog.router)
     application.include_router(quotes.router)
+    application.include_router(telegram.router)
 
     if settings.environment == "production" and settings.ai_provider == "fake":
         logger.warning(
