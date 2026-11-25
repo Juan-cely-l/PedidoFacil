@@ -5,18 +5,32 @@ Responde 200 de inmediato y atiende el mensaje en segundo plano (D4): si tardara
 Telegram reintentaría la misma actualización.
 """
 
+import datetime
 import hmac
+import logging
 from typing import Annotated, Any
 
+import httpx2
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy import Engine
 from sqlmodel import Session
 
 from app.config import Settings, get_app_settings
+from app.routers.quotes import QuoteExtractor, get_quote_extractor
+from app.services import quotes
 from app.services.catalog import list_quotable_items
 from app.services.telegram import TelegramBot
-from app.services.telegram_replies import catalog_text, split_messages, start_text
+from app.services.telegram_replies import (
+    EMPTY_CATALOG_TEXT,
+    TOO_LONG_TEXT,
+    catalog_text,
+    owner_notice,
+    quote_reply,
+    split_messages,
+    start_text,
+)
+from app.templating import COLOMBIA
 
 SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"  # noqa: S105  (nombre de la cabecera)
 WEBHOOK_PATH = "/telegram/webhook"
@@ -25,6 +39,7 @@ INVALID_SECRET_MESSAGE = "Token secreto inválido"  # noqa: S105  (mensaje de er
 CATALOG_COMMAND = "/catalogo"
 
 router = APIRouter(tags=["telegram"])
+logger = logging.getLogger("pedidofacil.telegram")
 
 
 def get_telegram_bot(request: Request) -> TelegramBot | None:
@@ -41,11 +56,12 @@ def get_telegram_bot(request: Request) -> TelegramBot | None:
         status.HTTP_404_NOT_FOUND: {"description": NOT_CONFIGURED_MESSAGE},
     },
 )
-async def telegram_webhook(
+async def telegram_webhook(  # noqa: PLR0913, PLR0917  (dependencias de FastAPI)
     request: Request,
     background: BackgroundTasks,
     settings: Annotated[Settings, Depends(get_app_settings)],
     bot: Annotated[TelegramBot | None, Depends(get_telegram_bot)],
+    extractor: Annotated[QuoteExtractor | None, Depends(get_quote_extractor)],
     secret: Annotated[str | None, Header(alias=SECRET_HEADER)] = None,
 ) -> Response:
     """Recibe una actualización de Telegram, solo con el secreto correcto."""
@@ -59,7 +75,8 @@ async def telegram_webhook(
     message = _text_message(await request.json())
     if message is not None:
         chat_id, text = message
-        background.add_task(_answer, bot, request.app.state.engine, chat_id, text)
+        reply = _Reply(bot, request.app.state.engine, settings, extractor)
+        background.add_task(reply.answer, chat_id, text)
     return Response(status_code=status.HTTP_200_OK)
 
 
@@ -75,17 +92,65 @@ def _text_message(update: Any) -> tuple[int, str] | None:
     return (chat_id, text) if isinstance(chat_id, int) else None
 
 
-async def _answer(bot: TelegramBot, engine: Engine, chat_id: int, text: str) -> None:
-    """Responde un mensaje de texto. Corre después de responder 200 a Telegram."""
-    if not text.startswith("/"):
-        return  # cotizar: Fase 3
-    # En grupos, Telegram agrega el nombre del bot: «/catalogo@MiBot».
-    command = text.split(maxsplit=1)[0].split("@", maxsplit=1)[0].lower()
-    if command == CATALOG_COMMAND:
+class _Reply:
+    """Atiende un mensaje después de responder 200 a Telegram, con su propia sesión."""
+
+    def __init__(
+        self,
+        bot: TelegramBot,
+        engine: Engine,
+        settings: Settings,
+        extractor: QuoteExtractor | None,
+    ) -> None:
+        self.bot, self.engine, self.settings, self.extractor = bot, engine, settings, extractor
+
+    async def answer(self, chat_id: int, text: str) -> None:
+        """Responde un comando o cotiza el mensaje."""
+        if text.startswith("/"):
+            await self._send(chat_id, self._command(text))
+            return
+        reply, notice = await self._quote(text)
+        await self._send(chat_id, reply)
+        owner_chat = self.settings.owner_telegram_chat_id
+        if notice is not None and owner_chat is not None:
+            await self._send(owner_chat, notice)
+
+    def _command(self, text: str) -> str:
+        # En grupos, Telegram agrega el nombre del bot: «/catalogo@MiBot».
+        command = text.split(maxsplit=1)[0].split("@", maxsplit=1)[0].lower()
+        if command != CATALOG_COMMAND:
+            return start_text()
         # Sesión propia: la de la petición ya se cerró cuando corre esta tarea.
-        with Session(engine) as session:
-            reply = catalog_text(list_quotable_items(session))
-    else:
-        reply = start_text()
-    for part in split_messages(reply):
-        await bot.send_message(chat_id, part)
+        with Session(self.engine) as session:
+            return catalog_text(list_quotable_items(session))
+
+    async def _quote(self, text: str) -> tuple[str, str | None]:
+        """Cotiza con el servicio de HU-08, igual que la web; devuelve la respuesta y el aviso."""
+        now = datetime.datetime.now(datetime.UTC)
+        with Session(self.engine) as session:
+            try:
+                quote = await quotes.quote_message(
+                    session,
+                    text,
+                    extractor=self.extractor,
+                    timeout_seconds=self.settings.ai_timeout_seconds,
+                    today=now.astimezone(COLOMBIA).date(),
+                    now=now,
+                )
+            except quotes.MessageTooLongError:
+                return TOO_LONG_TEXT, None
+            except quotes.NothingToQuoteError:
+                return EMPTY_CATALOG_TEXT, None
+            reply = quote_reply(quote, list_quotable_items(session))
+            notice = owner_notice(quote, self.settings.public_base_url or "")
+        return reply, notice
+
+    async def _send(self, chat_id: int, text: str) -> None:
+        """Envía en partes de hasta 4096 caracteres; si Telegram falla, registra solo el tipo."""
+        for part in split_messages(text):
+            try:
+                await self.bot.send_message(chat_id, part)
+            except httpx2.HTTPError as error:
+                # Ni el texto, ni el chat, ni la URL: la URL de la Bot API lleva el token.
+                logger.warning("No se pudo enviar a Telegram: error=%s", type(error).__name__)
+                return

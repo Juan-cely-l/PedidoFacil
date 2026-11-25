@@ -65,7 +65,7 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
 
 **⛔ ALTO — revisión de la fase roja 3.** Commit `test(PED-93): pruebas de cotizar por Telegram`.
 
-- [ ] T010 Verde: los textos, y en el router la llamada a `quote_message` (día de Colombia,
+- [x] T010 Verde: los textos, y en el router la llamada a `quote_message` (día de Colombia,
   `AI_TIMEOUT_SECONDS`) y los avisos al dueño. Commit `feat(PED-93): cotizar por Telegram`.
 
 ## Fase 4: Cierre (≈ 15 min)
