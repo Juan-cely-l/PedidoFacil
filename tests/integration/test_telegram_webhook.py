@@ -454,3 +454,47 @@ def test_ningun_log_lleva_el_texto_el_nombre_ni_el_chat_del_cliente(
     assert len(_to(bot_api, chat_id)) == 1  # el flujo corrió de verdad
     for secret in ("MENSAJE-CENTINELA", "NOMBRE-CENTINELA", str(chat_id)):
         assert secret not in app_log.text
+
+
+# Huecos decididos el 2026-11-24: sin chat del dueño y sin catálogo
+
+
+def test_sin_chat_del_duenio_el_aviso_se_omite_y_el_cliente_recibe_su_respuesta(
+    test_settings: Settings, bot_api: BotApi, model: ScriptedModel
+) -> None:
+    settings = Settings(
+        _env_file=None,
+        environment="test",
+        secret_key=test_settings.secret_key,
+        telegram_bot_token=SecretStr(TOKEN),
+        telegram_webhook_secret=SecretStr(SECRET),
+    )
+    assert settings.owner_telegram_chat_id is None
+    with TestClient(_app(settings, bot_api, model)) as client:
+        ref = _seed(client)
+        # Un no reconocido: con chat del dueño, este caso sí lo avisaría.
+        _use(
+            client,
+            _model(
+                line_payload(None, None, 12, "una docena de empanadas"),
+                line_payload(ref.cafe_id, None, 1, "un cafe"),
+            ),
+        )
+
+        _post(client, "una docena de empanadas y un cafe")
+
+    (reply,) = _to(bot_api, CUSTOMER_CHAT)
+    assert "no lo encontré" in reply
+    # Ningún mensaje fue a otro chat: el aviso se omitió, no se mandó a ninguna parte.
+    assert {m["chat_id"] for m in _sent(bot_api)} == {CUSTOMER_CHAT}
+
+
+def test_con_el_catalogo_vacio_responde_que_no_hay_productos_sin_avisar_al_duenio(
+    telegram: TestClient, bot_api: BotApi, model: ScriptedModel
+) -> None:
+    # Sin _seed: no hay nada cotizable, así que el servicio lanza NothingToQuoteError.
+    _post(telegram, "dos tortas medianas")
+
+    assert _to(bot_api, CUSTOMER_CHAT) == ["Todavía no hay productos disponibles."]
+    assert _to(bot_api, OWNER_CHAT) == []
+    assert model.calls == 0  # el servicio lo rechaza antes de llamar a la IA
