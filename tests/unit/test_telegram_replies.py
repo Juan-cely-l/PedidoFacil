@@ -297,7 +297,7 @@ def test_ningun_mensaje_al_cliente_lleva_informacion_interna(quote: Quote) -> No
     ids=["pendientes", "nada_reconocido", "ia_caida"],
 )
 def test_el_duenio_recibe_aviso_con_el_numero_y_el_enlace(quote: Quote) -> None:
-    notice = owner_notice(quote, BASE_URL, customer_username="ana_reposteria")  # type: ignore[call-arg]
+    notice = owner_notice(quote, BASE_URL, customer_username="ana_reposteria")
 
     assert notice is not None
     assert f"n.º {QUOTE_ID}" in notice
@@ -308,21 +308,21 @@ def test_el_duenio_recibe_aviso_con_el_numero_y_el_enlace(quote: Quote) -> None:
     "quote", [CASES["reconocida"], CASES["sin_pedido"]], ids=["reconocida", "sin_pedido"]
 )
 def test_sin_nada_que_revisar_el_duenio_no_recibe_aviso(quote: Quote) -> None:
-    assert owner_notice(quote, BASE_URL, customer_username="ana_reposteria") is None  # type: ignore[call-arg]
+    assert owner_notice(quote, BASE_URL, customer_username="ana_reposteria") is None
 
 
 # Decisión de producto del 25/11: el aviso dice cómo contactar al cliente.
 
 
 def test_el_aviso_lleva_el_usuario_de_telegram_del_cliente() -> None:
-    notice = owner_notice(CASES["pendientes"], BASE_URL, customer_username="ana_reposteria")  # type: ignore[call-arg]
+    notice = owner_notice(CASES["pendientes"], BASE_URL, customer_username="ana_reposteria")
 
     assert notice is not None
     assert "@ana_reposteria" in notice
 
 
 def test_sin_usuario_el_aviso_lo_dice_en_vez_de_omitirlo() -> None:
-    notice = owner_notice(CASES["pendientes"], BASE_URL, customer_username=None)  # type: ignore[call-arg]
+    notice = owner_notice(CASES["pendientes"], BASE_URL, customer_username=None)
 
     assert notice is not None
     assert "El cliente no tiene usuario de Telegram" in notice
