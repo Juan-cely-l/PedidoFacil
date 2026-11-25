@@ -46,6 +46,11 @@ def _configure_logging(level: str) -> None:
         handler.setFormatter(logging.Formatter(_LOG_FORMAT))
         app_logger.addHandler(handler)
     app_logger.propagate = False
+    # Principio VI: httpx2 registra en INFO la URL completa de cada petición, y esa URL puede
+    # llevar credenciales: el token de la Bot API de Telegram va en la ruta. En WARNING para
+    # todo el proceso, aunque alguien baje el nivel del logger raíz. No quitar para depurar:
+    # reabre la fuga.
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
