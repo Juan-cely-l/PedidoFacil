@@ -201,8 +201,9 @@ def test_catalogo_responde_al_chat_con_los_items_y_sus_precios(
     (message,) = _sent(bot_api)
     assert message["chat_id"] == CUSTOMER_CHAT
     text = str(message["text"])
-    assert "Torta de chocolate — Tamaño: Mediana" in text
-    assert "$ 45.000" in text
+    assert "\nTorta de chocolate\n" in text  # el producto, en su propia línea
+    mediana = next(line for line in text.splitlines() if "Mediana" in line)
+    assert "$ 45.000" in mediana
     assert "Café" in text
     assert "parse_mode" not in message  # texto plano (D6)
     assert model.calls == 0
@@ -287,7 +288,7 @@ def test_una_cotizacion_reconocida_responde_precios_y_total_sin_avisar_al_duenio
     assert "$ 90.000" in reply
     assert "$ 3.500" in reply
     assert "$ 93.500" in reply
-    assert "El dueño te confirmará el pedido" in reply
+    assert "todavía no es un pedido. Para hacer tu pedido, escríbele al negocio." in reply
     assert _to(bot_api, OWNER_CHAT) == []
 
 
@@ -349,7 +350,7 @@ def test_un_mensaje_sin_pedido_explica_como_pedir_sin_avisar_al_duenio(
     assert _to(bot_api, OWNER_CHAT) == []
 
 
-REVIEW = "Recibimos tu pedido; el dueño lo revisará y te escribirá."
+REVIEW = "Recibimos tu mensaje; el dueño lo revisará."
 
 
 @pytest.mark.parametrize("case", ["tiempo_agotado", "error_503", "ia_desactivada"])
@@ -443,7 +444,12 @@ def test_ningun_log_lleva_el_texto_el_nombre_ni_el_chat_del_cliente(
     update["message"] = {
         **update["message"],  # type: ignore[dict-item]
         "chat": {"id": chat_id, "type": "private"},
-        "from": {"id": chat_id, "is_bot": False, "first_name": "NOMBRE-CENTINELA"},
+        "from": {
+            "id": chat_id,
+            "is_bot": False,
+            "first_name": "NOMBRE-CENTINELA",
+            "username": "usuario_centinela",
+        },
     }
 
     response = telegram.post(
@@ -452,7 +458,7 @@ def test_ningun_log_lleva_el_texto_el_nombre_ni_el_chat_del_cliente(
 
     assert response.status_code == 200
     assert len(_to(bot_api, chat_id)) == 1  # el flujo corrió de verdad
-    for secret in ("MENSAJE-CENTINELA", "NOMBRE-CENTINELA", str(chat_id)):
+    for secret in ("MENSAJE-CENTINELA", "NOMBRE-CENTINELA", "usuario_centinela", str(chat_id)):
         assert secret not in app_log.text
 
 
@@ -498,3 +504,45 @@ def test_con_el_catalogo_vacio_responde_que_no_hay_productos_sin_avisar_al_dueni
     assert _to(bot_api, CUSTOMER_CHAT) == ["Todavía no hay productos disponibles."]
     assert _to(bot_api, OWNER_CHAT) == []
     assert model.calls == 0  # el servicio lo rechaza antes de llamar a la IA
+
+
+# Decisión de producto del 25/11: el aviso al dueño lleva el @usuario del cliente.
+
+
+@pytest.mark.parametrize(
+    ("sender", "expected"),
+    [
+        pytest.param(
+            {
+                "id": CUSTOMER_CHAT,
+                "is_bot": False,
+                "first_name": "Ana",
+                "username": "ana_reposteria",
+            },
+            "@ana_reposteria",
+            id="con_usuario",
+        ),
+        pytest.param(
+            {"id": CUSTOMER_CHAT, "is_bot": False, "first_name": "Ana"},
+            "El cliente no tiene usuario de Telegram",
+            id="sin_usuario",
+        ),
+    ],
+)
+def test_el_aviso_al_duenio_dice_como_contactar_al_cliente(
+    telegram: TestClient, bot_api: BotApi, sender: dict[str, object], expected: str
+) -> None:
+    _seed(telegram)
+    _use(telegram, _model(line_payload(None, None, 12, "una docena de empanadas")))
+    update = _update(text="una docena de empanadas")
+    update["message"] = {**update["message"], "from": sender}  # type: ignore[dict-item]
+
+    response = telegram.post(
+        WEBHOOK_PATH, json=update, headers={SECRET_HEADER: SECRET}, follow_redirects=False
+    )
+
+    assert response.status_code == 200
+    (notice,) = _to(bot_api, OWNER_CHAT)
+    assert expected in notice
+    # El @usuario es para el dueño: el cliente no lo recibe de vuelta.
+    assert all("@" not in reply for reply in _to(bot_api, CUSTOMER_CHAT))

@@ -25,19 +25,57 @@ def _line_with(text: str, label: str) -> str:
     return line
 
 
-def test_el_catalogo_trae_cada_item_con_su_precio_en_la_misma_linea() -> None:
+def _block_with(text: str, fragment: str) -> str:
+    """El bloque, separado por líneas en blanco, que contiene `fragment`."""
+    (block,) = [block for block in text.split("\n\n") if fragment in block]
+    return block
+
+
+PRODUCTS = sorted(
+    {item.label.partition(" — ")[0] for item in REPOSTERIA},
+    key=lambda name: [item.label for item in REPOSTERIA].index(
+        next(i.label for i in REPOSTERIA if i.label.startswith(name))
+    ),
+)
+
+
+def test_cada_producto_va_en_su_propio_bloque_con_sus_variantes_debajo() -> None:
+    # Decisión de producto del 25/11: el precio no debe confundirse con el nombre.
     text = catalog_text(REPOSTERIA)
 
-    assert "$ 45.000" in _line_with(text, "Torta de chocolate — Tamaño: Mediana")
-    assert "$ 2.500" in _line_with(text, "Alfajor")
-    for item in REPOSTERIA:
-        assert item.label in text
+    torta = _block_with(text, "Torta de chocolate")
+    name, *variants = torta.splitlines()
+    assert name.strip() == "Torta de chocolate"  # el nombre, solo
+    assert [line for line in variants if "Mediana" in line] == [
+        line for line in variants if "$ 45.000" in line
+    ]
+    for size in ("Pequeña", "Mediana", "Grande"):
+        (line,) = [line for line in variants if size in line]
+        assert "Torta de chocolate" not in line  # la variante se lee como variante
+    assert "zanahoria" not in torta.lower()  # cada producto en su bloque
+
+
+def test_un_producto_sin_variantes_lleva_el_precio_en_su_propia_linea() -> None:
+    alfajor = _block_with(catalog_text(REPOSTERIA), "Alfajor")
+
+    name, *rest = alfajor.splitlines()
+    assert name.strip() == "Alfajor"
+    assert "$" not in name
+    assert any("$ 2.500" in line for line in rest)
+
+
+def test_ningun_nombre_de_producto_comparte_linea_con_un_precio() -> None:
+    text = catalog_text(REPOSTERIA)
+
+    for product in PRODUCTS:
+        (line,) = [line for line in text.splitlines() if line.strip() == product]
+        assert "$" not in line
 
 
 def test_el_catalogo_conserva_el_orden_de_list_quotable_items() -> None:
     text = catalog_text(REPOSTERIA)
 
-    positions = [text.index(item.label) for item in REPOSTERIA]
+    positions = [text.index(f"\n{product}\n") for product in PRODUCTS]
     assert positions == sorted(positions)
 
 
@@ -100,8 +138,11 @@ def test_una_linea_mas_larga_que_el_limite_se_corta_sin_perder_texto() -> None:
 QUOTE_ID = 4242  # un número que no aparece en ningún precio ni cantidad
 BASE_URL = "https://pedidofacil.example"
 LINK = f"{BASE_URL}/cotizaciones/{QUOTE_ID}"
-DONE = "El dueño te confirmará el pedido."
-REVIEW = "Recibimos tu pedido; el dueño lo revisará y te escribirá."
+DONE = (
+    "Esta cotización tiene los precios de hoy y todavía no es un pedido. "
+    "Para hacer tu pedido, escríbele al negocio."
+)
+REVIEW = "Recibimos tu mensaje; el dueño lo revisará."
 # FR-03: nada interno en un mensaje al cliente.
 INTERNAL = (str(QUOTE_ID), "gemini", "timeout", "provider_error", "invalid_output", "Error", "503")
 
@@ -152,14 +193,31 @@ ALFAJORES = ("Alfajor", 2500, 12, 5, None)
 def test_una_cotizacion_reconocida_trae_cada_linea_el_total_y_el_cierre() -> None:
     text = quote_reply(_quote(_ready(*TORTA_MEDIANA), _ready(*ALFAJORES)), REPOSTERIA)
 
-    torta = _line_with(text, "Torta de chocolate — Tamaño: Mediana")
-    assert "2" in torta
-    assert "$ 90.000" in torta  # 45.000 por 2
-    alfajores = _line_with(text, "Alfajor")
-    assert "12" in alfajores
-    assert "$ 30.000" in alfajores
+    lines = text.splitlines()
+    torta = lines.index(_line_with(text, "Torta de chocolate — Tamaño: Mediana"))
+    assert "2" in lines[torta + 1]
+    assert "$ 90.000" in lines[torta + 1]  # 45.000 por 2, debajo de su producto
+    alfajores = lines.index(_line_with(text, "Alfajor"))
+    assert "12" in lines[alfajores + 1]
+    assert "$ 30.000" in lines[alfajores + 1]
     assert "$ 120.000" in _line_with(text, "Total")
     assert text.rstrip().endswith(DONE)
+
+
+def test_las_lineas_el_total_y_lo_pendiente_van_en_bloques_separados() -> None:
+    # Decisión de producto del 25/11: los tres bloques se leían como uno solo.
+    quote = _quote(_ready(*TORTA_MEDIANA), _pending("unas empanadas", ReviewReason.NO_RECONOCIDO))
+
+    text = quote_reply(quote, REPOSTERIA)
+
+    lines_block = _block_with(text, "Torta de chocolate — Tamaño: Mediana")
+    total_block = _block_with(text, "Total")
+    pending_block = _block_with(text, "unas empanadas")
+    assert len({lines_block, total_block, pending_block}) == 3
+    assert "Total" not in lines_block
+    assert pending_block.splitlines()[0] == "Por revisar:"
+    order = [text.index(b) for b in (lines_block, total_block, pending_block)]
+    assert order == sorted(order)
 
 
 def test_las_pendientes_citan_al_cliente_y_el_total_solo_suma_las_reconocidas() -> None:
@@ -239,7 +297,7 @@ def test_ningun_mensaje_al_cliente_lleva_informacion_interna(quote: Quote) -> No
     ids=["pendientes", "nada_reconocido", "ia_caida"],
 )
 def test_el_duenio_recibe_aviso_con_el_numero_y_el_enlace(quote: Quote) -> None:
-    notice = owner_notice(quote, BASE_URL)
+    notice = owner_notice(quote, BASE_URL, customer_username="ana_reposteria")  # type: ignore[call-arg]
 
     assert notice is not None
     assert f"n.º {QUOTE_ID}" in notice
@@ -250,4 +308,22 @@ def test_el_duenio_recibe_aviso_con_el_numero_y_el_enlace(quote: Quote) -> None:
     "quote", [CASES["reconocida"], CASES["sin_pedido"]], ids=["reconocida", "sin_pedido"]
 )
 def test_sin_nada_que_revisar_el_duenio_no_recibe_aviso(quote: Quote) -> None:
-    assert owner_notice(quote, BASE_URL) is None
+    assert owner_notice(quote, BASE_URL, customer_username="ana_reposteria") is None  # type: ignore[call-arg]
+
+
+# Decisión de producto del 25/11: el aviso dice cómo contactar al cliente.
+
+
+def test_el_aviso_lleva_el_usuario_de_telegram_del_cliente() -> None:
+    notice = owner_notice(CASES["pendientes"], BASE_URL, customer_username="ana_reposteria")  # type: ignore[call-arg]
+
+    assert notice is not None
+    assert "@ana_reposteria" in notice
+
+
+def test_sin_usuario_el_aviso_lo_dice_en_vez_de_omitirlo() -> None:
+    notice = owner_notice(CASES["pendientes"], BASE_URL, customer_username=None)  # type: ignore[call-arg]
+
+    assert notice is not None
+    assert "El cliente no tiene usuario de Telegram" in notice
+    assert "@" not in notice
