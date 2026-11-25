@@ -70,6 +70,6 @@ Convenciones de las pruebas: la Bot API con `httpx2.MockTransport`, que registra
 
 ## Fase 4: Cierre (≈ 15 min)
 
-- [ ] T011 `docs/despliegue.md`: las tres variables en Render y el `curl` a `setWebhook` con
+- [x] T011 `docs/despliegue.md`: las tres variables en Render y el `curl` a `setWebhook` con
   `secret_token`. `uv run pytest`, `ruff`, `mypy` y `pre-commit run --all-files`. Commit
   `docs(PED-93): desplegar el bot de Telegram`.
