@@ -2,6 +2,8 @@
 
 import logging
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal, cast
 
 from fastapi import Depends, FastAPI
@@ -23,6 +25,7 @@ from app.security import (
 )
 from app.services.identity import GoogleIdentityProvider
 from app.services.quote_ai import build_quote_agent
+from app.services.seed_catalog import run_seed
 from app.services.telegram import TelegramBot
 
 LOGGER_NAME = "pedidofacil"
@@ -53,6 +56,17 @@ def _configure_logging(level: str) -> None:
     logging.getLogger("httpx2").setLevel(logging.WARNING)
 
 
+@asynccontextmanager
+async def _lifespan(application: FastAPI) -> AsyncIterator[None]:
+    """Al arrancar, siembra el catálogo de demostración solo si SEED_DEMO_CATALOG está activa.
+
+    Apagada no hace nada: ni consulta, ni transacción, ni log.
+    """
+    if application.state.settings.seed_demo_catalog:
+        run_seed(application.state.engine)
+    yield
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Crea y configura la aplicación.
 
@@ -74,6 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Denegar por defecto: toda ruta, presente o futura, exige la sesión del dueño salvo
         # las de PUBLIC_PATHS (research.md R1).
         dependencies=[Depends(require_owner)],
+        lifespan=_lifespan,
     )
     application.add_exception_handler(LoginRequired, redirect_to_login)
     # Solo SQLAlchemy, nunca Exception: un error de programación no se disfraza de error de la base.

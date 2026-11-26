@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     telegram_webhook_secret: SecretStr | None = None
     owner_telegram_chat_id: int | None = None
+    # Catálogo de demostración (PED-102): si está activa, se siembra al arrancar.
+    seed_demo_catalog: bool = False
     # Render publica la URL del servicio: se usa si PUBLIC_BASE_URL no está definida.
     render_external_url: str | None = Field(default=None, validation_alias="RENDER_EXTERNAL_URL")
 

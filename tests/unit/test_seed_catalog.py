@@ -7,7 +7,7 @@ from sqlmodel import Session, SQLModel, select
 from app.db import build_engine
 from app.models.catalog import Product, ProductInput, ProductVariant, VariantInput, VariantKind
 from app.services.catalog import add_variant, create_product, list_quotable_items
-from app.services.seed_catalog import (  # type: ignore[import-not-found]
+from app.services.seed_catalog import (
     SeedSummary,
     run_seed,
     seed_catalog,

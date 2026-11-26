@@ -654,7 +654,7 @@ def test_sin_seed_demo_catalog_la_siembra_queda_apagada(monkeypatch: pytest.Monk
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.seed_demo_catalog is False  # type: ignore[attr-defined]
+    assert settings.seed_demo_catalog is False
 
 
 @pytest.mark.parametrize(("value", "expected"), [("true", True), ("1", True), ("false", False)])
@@ -665,7 +665,7 @@ def test_seed_demo_catalog_se_lee_del_entorno(
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.seed_demo_catalog is expected  # type: ignore[attr-defined]
+    assert settings.seed_demo_catalog is expected
 
 
 def test_seed_demo_catalog_vacia_cuenta_como_apagada(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -673,7 +673,7 @@ def test_seed_demo_catalog_vacia_cuenta_como_apagada(monkeypatch: pytest.MonkeyP
 
     settings = Settings(_env_file=None, environment="test")
 
-    assert settings.seed_demo_catalog is False  # type: ignore[attr-defined]
+    assert settings.seed_demo_catalog is False
 
 
 def test_seed_demo_catalog_no_admite_valores_ambiguos(monkeypatch: pytest.MonkeyPatch) -> None:
