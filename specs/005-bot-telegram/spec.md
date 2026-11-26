@@ -48,8 +48,9 @@ No se escribe ni se deja preparado:
 
 **Cotización**
 7. Un mensaje con productos reconocidos responde las líneas (etiqueta, cantidad y subtotal) y el
-   total, en pesos con separador de miles. Termina con «Esta cotización tiene los precios de hoy y todavía no es un pedido. Para hacer tu pedido, escríbele al negocio.»
-   (texto cambiado el 25/11: el sistema no puede avisarle al cliente).
+   total, en pesos con separador de miles. Termina con «El negocio ya recibió tu cotización y te
+   escribirá para confirmarla.» (texto cambiado el 26/11, PED-101). **El dueño recibe un aviso**
+   con el número de la cotización, su enlace y el `@usuario` del cliente, sin motivo.
 8. Con alguna línea «Por revisar»:
    - las líneas reconocidas se cotizan igual, y el total solo las incluye;
    - para cada línea pendiente, el bot cita lo que escribió el cliente y dice por qué no la
@@ -92,7 +93,7 @@ No se escribe ni se deja preparado:
 | D4 | Responder 200 y procesar con `BackgroundTasks`. | Con la IA, la respuesta puede tardar hasta 10 s. Un error o una demora harían que Telegram reintentara la misma actualización y gastara cuota de Gemini otra vez. |
 | D5 | El catálogo muestra los precios. | Son los precios públicos del negocio, y salen de `list_quotable_items`. |
 | D6 | Texto plano, sin `parse_mode`. | Evita escapar Markdown o HTML del texto del cliente y no hay riesgo de formato inyectado. |
-| D7 | El aviso al dueño lleva el número de la cotización, el enlace `PUBLIC_BASE_URL/cotizaciones/{id}`, el motivo y el `@usuario` de Telegram del cliente, o la frase «El cliente no tiene usuario de Telegram» si no lo tiene (decisión del 25/11). | El dueño corrige en la web, que ya existe (HU-08), y puede escribirle al cliente desde su propia cuenta. El `@usuario` va solo en ese mensaje privado: nunca en los logs (principio VI). |
+| D7 | El dueño recibe aviso de toda cotización con líneas o con falla de la IA (PED-101, 26/11); no de un mensaje sin pedido (escenario 9). El aviso lleva el número de la cotización, el enlace `PUBLIC_BASE_URL/cotizaciones/{id}`, el motivo y el `@usuario` de Telegram del cliente, o la frase «El cliente no tiene usuario de Telegram» si no lo tiene (decisión del 25/11). | El dueño corrige en la web, que ya existe (HU-08), y puede escribirle al cliente desde su propia cuenta. El `@usuario` va solo en ese mensaje privado: nunca en los logs (principio VI). |
 
 ## Riesgos
 
@@ -112,3 +113,13 @@ No se escribe ni se deja preparado:
 - **Aviso al dueño**: lleva el `@usuario` del cliente (D7).
 - **Textos al cliente**: se retiran «El dueño te confirmará el pedido» y «te escribirá», porque el
   sistema no tiene forma de avisarle al cliente.
+
+## Cambios del 26/11 (PED-101)
+
+- **Aviso al dueño de toda cotización**: también de la que quedó completa, sin motivo. Antes solo
+  se avisaba si había líneas por revisar o fallaba la IA.
+- **Texto de cierre al cliente**: «El negocio ya recibió tu cotización y te escribirá para
+  confirmarla.» Ahora es cierto: el dueño recibe todas, con el `@usuario` del cliente para
+  escribirle desde su propia cuenta. Sin `@usuario`, el aviso lo dice y el dueño solo tiene el
+  enlace a la cotización.
+- Sin cambios de modelo, migraciones ni comandos nuevos: el flujo de aceptación queda fuera.

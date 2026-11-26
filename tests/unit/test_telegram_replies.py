@@ -138,10 +138,8 @@ def test_una_linea_mas_larga_que_el_limite_se_corta_sin_perder_texto() -> None:
 QUOTE_ID = 4242  # un número que no aparece en ningún precio ni cantidad
 BASE_URL = "https://pedidofacil.example"
 LINK = f"{BASE_URL}/cotizaciones/{QUOTE_ID}"
-DONE = (
-    "Esta cotización tiene los precios de hoy y todavía no es un pedido. "
-    "Para hacer tu pedido, escríbele al negocio."
-)
+# PED-101 (26/11): cierto porque el dueño recibe aviso de toda cotización, con el @usuario.
+DONE = "El negocio ya recibió tu cotización y te escribirá para confirmarla."
 REVIEW = "Recibimos tu mensaje; el dueño lo revisará."
 # FR-03: nada interno en un mensaje al cliente.
 INTERNAL = (str(QUOTE_ID), "gemini", "timeout", "provider_error", "invalid_output", "Error", "503")
@@ -293,8 +291,8 @@ def test_ningun_mensaje_al_cliente_lleva_informacion_interna(quote: Quote) -> No
 
 @pytest.mark.parametrize(
     "quote",
-    [CASES["pendientes"], CASES["nada_reconocido"], CASES["ia_caida"]],
-    ids=["pendientes", "nada_reconocido", "ia_caida"],
+    [CASES["reconocida"], CASES["pendientes"], CASES["nada_reconocido"], CASES["ia_caida"]],
+    ids=["reconocida", "pendientes", "nada_reconocido", "ia_caida"],
 )
 def test_el_duenio_recibe_aviso_con_el_numero_y_el_enlace(quote: Quote) -> None:
     notice = owner_notice(quote, BASE_URL, customer_username="ana_reposteria")
@@ -304,11 +302,19 @@ def test_el_duenio_recibe_aviso_con_el_numero_y_el_enlace(quote: Quote) -> None:
     assert LINK in notice
 
 
-@pytest.mark.parametrize(
-    "quote", [CASES["reconocida"], CASES["sin_pedido"]], ids=["reconocida", "sin_pedido"]
-)
-def test_sin_nada_que_revisar_el_duenio_no_recibe_aviso(quote: Quote) -> None:
-    assert owner_notice(quote, BASE_URL, customer_username="ana_reposteria") is None
+def test_una_cotizacion_completa_tambien_avisa_al_duenio_sin_motivo() -> None:
+    # PED-101: el dueño recibe toda cotización para confirmarla con el cliente.
+    notice = owner_notice(CASES["reconocida"], BASE_URL, customer_username="ana_reposteria")
+
+    assert notice is not None
+    assert notice.splitlines()[0] == f"Cotización n.º {QUOTE_ID} por Telegram."
+    assert "@ana_reposteria" in notice
+    assert LINK in notice
+
+
+def test_un_mensaje_sin_pedido_no_avisa_al_duenio() -> None:
+    # Escenario 9: cero líneas no es una cotización que confirmar.
+    assert owner_notice(CASES["sin_pedido"], BASE_URL, customer_username="ana_reposteria") is None
 
 
 # Decisión de producto del 25/11: el aviso dice cómo contactar al cliente.
