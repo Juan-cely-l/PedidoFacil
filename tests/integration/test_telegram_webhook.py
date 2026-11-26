@@ -270,7 +270,7 @@ def _stored(client: TestClient, message: str) -> Quote:
         return quote
 
 
-def test_una_cotizacion_reconocida_responde_precios_y_total_sin_avisar_al_duenio(
+def test_una_cotizacion_reconocida_responde_precios_y_total_y_avisa_al_duenio(
     telegram: TestClient, bot_api: BotApi
 ) -> None:
     ref = _seed(telegram)
@@ -288,8 +288,12 @@ def test_una_cotizacion_reconocida_responde_precios_y_total_sin_avisar_al_duenio
     assert "$ 90.000" in reply
     assert "$ 3.500" in reply
     assert "$ 93.500" in reply
-    assert "todavía no es un pedido. Para hacer tu pedido, escríbele al negocio." in reply
-    assert _to(bot_api, OWNER_CHAT) == []
+    assert "El negocio ya recibió tu cotización y te escribirá para confirmarla." in reply
+    # PED-101: el dueño recibe aviso de toda cotización, también de la completa.
+    (notice,) = _to(bot_api, OWNER_CHAT)
+    quote_id = _stored(telegram, "dos tortas medianas y un cafe").id
+    assert f"http://testserver/cotizaciones/{quote_id}" in notice
+    assert "cotizaciones/" not in reply  # FR-03: el enlace es solo para el dueño
 
 
 def test_un_precio_distinto_en_el_mensaje_no_cambia_el_del_catalogo(
