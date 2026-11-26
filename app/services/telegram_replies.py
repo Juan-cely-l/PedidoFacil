@@ -14,12 +14,9 @@ TELEGRAM_MAX_LENGTH = 4096
 
 EMPTY_CATALOG_TEXT = "Todavía no hay productos disponibles."
 TOO_LONG_TEXT = "Tu mensaje es demasiado largo; envíamelo más corto, por favor."
-# Ciertos con lo que el sistema hace hoy: no tiene forma de avisarle al cliente (25/11).
 REVIEW_TEXT = "Recibimos tu mensaje; el dueño lo revisará."
-DONE_TEXT = (
-    "Esta cotización tiene los precios de hoy y todavía no es un pedido. "
-    "Para hacer tu pedido, escríbele al negocio."
-)
+# Cierto desde PED-101 (26/11): el dueño recibe aviso de toda cotización, con el @usuario.
+DONE_TEXT = "El negocio ya recibió tu cotización y te escribirá para confirmarla."
 SEPARATOR = "—" * 16
 NO_ORDER_TEXT = (
     "No encontré un pedido en tu mensaje. Escríbeme los productos y las cantidades, "
@@ -128,21 +125,25 @@ def _pending_line(line: QuoteLine, items: list[QuotableItem]) -> str:
 
 
 def owner_notice(quote: Quote, base_url: str, *, customer_username: str | None) -> str | None:
-    """El aviso al dueño, o `None` si la cotización no necesita su revisión (D7).
+    """El aviso al dueño de toda cotización, con el motivo si hay algo que revisar (D7).
+
+    `None` solo para un mensaje sin pedido (cero líneas, escenario 9): no hay nada que confirmar.
 
     Lleva el @usuario del cliente para que el dueño le escriba desde su cuenta; si no tiene, lo
     dice. Es un mensaje privado al dueño: ese dato nunca va a los logs (principio VI).
     """
     link = f"{base_url}/cotizaciones/{quote.id}"
     if quote.ai_outcome != AiOutcome.OK:
-        reason = "la IA no pudo procesarla"
-    elif pending := sum(1 for line in quote.lines if line.status == LineStatus.POR_REVISAR):
-        reason = f"{pending} línea(s) por revisar"
-    else:
+        reason = ": la IA no pudo procesarla"
+    elif not quote.lines:
         return None
+    elif pending := sum(1 for line in quote.lines if line.status == LineStatus.POR_REVISAR):
+        reason = f": {pending} línea(s) por revisar"
+    else:
+        reason = ""
     contact = (
         f"Cliente: @{customer_username}"
         if customer_username
         else "El cliente no tiene usuario de Telegram."
     )
-    return f"Cotización n.º {quote.id} por Telegram: {reason}.\n{contact}\nRevísala: {link}"
+    return f"Cotización n.º {quote.id} por Telegram{reason}.\n{contact}\nRevísala: {link}"
