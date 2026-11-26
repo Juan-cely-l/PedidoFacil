@@ -644,3 +644,42 @@ def test_un_chat_del_dueno_que_no_es_un_numero_impide_arrancar(
         Settings(_env_file=None, environment="test")
 
     assert "owner_telegram_chat_id" in str(error.value)
+
+
+# PED-102: siembra del catálogo de demostración al arrancar
+
+
+def test_sin_seed_demo_catalog_la_siembra_queda_apagada(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SEED_DEMO_CATALOG", raising=False)
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.seed_demo_catalog is False
+
+
+@pytest.mark.parametrize(("value", "expected"), [("true", True), ("1", True), ("false", False)])
+def test_seed_demo_catalog_se_lee_del_entorno(
+    monkeypatch: pytest.MonkeyPatch, value: str, expected: bool
+) -> None:
+    monkeypatch.setenv("SEED_DEMO_CATALOG", value)
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.seed_demo_catalog is expected
+
+
+def test_seed_demo_catalog_vacia_cuenta_como_apagada(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SEED_DEMO_CATALOG", "")
+
+    settings = Settings(_env_file=None, environment="test")
+
+    assert settings.seed_demo_catalog is False
+
+
+def test_seed_demo_catalog_no_admite_valores_ambiguos(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SEED_DEMO_CATALOG", "quizas")
+
+    with pytest.raises(ValidationError) as error:
+        Settings(_env_file=None, environment="test")
+
+    assert "seed_demo_catalog" in str(error.value)

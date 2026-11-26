@@ -49,3 +49,11 @@ def test_el_ejemplo_sirve_para_desarrollo_local() -> None:
 @pytest.mark.parametrize("variable", MUST_BE_COMMENTED)
 def test_secretos_y_valores_por_ambiente_quedan_comentados(variable: str) -> None:
     assert not any(line.startswith(f"{variable}=") for line in _active_lines())
+
+
+def test_la_siembra_de_demostracion_queda_comentada() -> None:
+    # Activa por error, sembraría el catálogo de demostración en la base del dueño.
+    content = ENV_EXAMPLE.read_text(encoding="utf-8")
+
+    assert re.search(r"^# SEED_DEMO_CATALOG=", content, flags=re.MULTILINE)
+    assert not any(line.startswith("SEED_DEMO_CATALOG=") for line in _active_lines())
